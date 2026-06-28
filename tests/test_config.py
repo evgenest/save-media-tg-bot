@@ -51,6 +51,13 @@ def test_load_config_invalid_allowed_user_ids_raises():
         load_config(env)
 
 
+def test_load_config_empty_after_strip_allowed_user_ids_raises():
+    env = dict(VALID_ENV, ALLOWED_USER_IDS=" , ")
+
+    with pytest.raises(ConfigError, match="ALLOWED_USER_IDS"):
+        load_config(env)
+
+
 def test_load_config_default_batch_timeout():
     env = dict(VALID_ENV)
     env.pop("BATCH_TIMEOUT", None)

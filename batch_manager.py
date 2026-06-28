@@ -16,7 +16,7 @@ TimerFactory = Callable[[float, Callable[[], Awaitable[None]]], TimerHandle]
 
 
 def asyncio_timer_factory(delay: float, callback: Callable[[], Awaitable[None]]) -> TimerHandle:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return loop.call_later(delay, lambda: asyncio.create_task(callback()))
 
 
