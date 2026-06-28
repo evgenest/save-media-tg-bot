@@ -5,5 +5,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - API_ID=${API_ID}
+      - API_HASH=${API_HASH}
+      - BOT_TOKEN=${BOT_TOKEN}
+      - ALLOWED_USER_IDS=${ALLOWED_USER_IDS}
     volumes:
       - ./storage:/storage
