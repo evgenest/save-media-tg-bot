@@ -1,0 +1,9 @@
+services:
+  mediasaver:
+    build: .
+    container_name: mediasaver-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./storage:/storage
