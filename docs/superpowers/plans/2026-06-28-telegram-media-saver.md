@@ -1343,13 +1343,19 @@ git commit -m "feat: wire Kurigram client, whitelist, batching, and finish-batch
 
 - [ ] **Step 1: Create `Dockerfile`**
 
+`TgCrypto` (from `requirements.txt`) ships only a source distribution on PyPI — no prebuilt wheel — so it must be compiled at build time. `python:3.12-slim` has no compiler by default, so `gcc`/`libc6-dev` are installed, used, and purged in the same layer to keep the final image small.
+
 ```dockerfile
 FROM python:3.12-slim
 
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libc6-dev \
+    && pip install --no-cache-dir -r requirements.txt \
+    && apt-get purge -y --auto-remove gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY config.py storage.py downloader.py batch_manager.py bot.py ./
 
