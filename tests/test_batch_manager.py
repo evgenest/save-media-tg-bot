@@ -125,6 +125,18 @@ async def test_record_file_resets_timer_on_each_call():
     assert second_handle.delay == 30
 
 
+async def test_record_file_resets_timer_even_if_on_file_added_raises():
+    h = make_harness()
+    await h.manager.ensure_batch(user_id=1)
+    h.on_file_added.side_effect = RuntimeError("flood wait")
+
+    with pytest.raises(RuntimeError, match="flood wait"):
+        await h.manager.record_file(user_id=1, outcome=make_outcome())
+
+    assert h.timer_factory.latest.cancelled is False
+    assert h.timer_factory.latest.delay == 30
+
+
 async def test_timer_firing_closes_the_batch():
     h = make_harness()
     await h.manager.ensure_batch(user_id=1)

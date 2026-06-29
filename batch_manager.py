@@ -74,8 +74,8 @@ class BatchManager:
         if not outcome.success:
             batch.error_count += 1
 
-        await self._on_file_added(batch, outcome)
         self._reset_timer(user_id)
+        await self._on_file_added(batch, outcome)
         return batch
 
     async def close_batch(self, user_id: int) -> Optional[Batch]:
