@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 from batch_manager import Batch
-from bot import BotState, LiveProgress, build_help_keyboard, build_help_text, build_status_text, create_app, make_progress_callback, refresh_status_message
+from bot import BotState, LiveProgress, build_bot_commands, build_help_keyboard, build_help_text, build_status_text, create_app, make_progress_callback, refresh_status_message
 from config import Config
 
 
@@ -135,3 +135,11 @@ def test_get_lock_returns_different_locks_for_different_users():
     state = BotState()
 
     assert state.get_lock(1) is not state.get_lock(2)
+
+
+def test_build_bot_commands_includes_start_and_help():
+    commands = build_bot_commands()
+
+    names = [c.command for c in commands]
+
+    assert names == ["start", "help"]

@@ -9,6 +9,7 @@ from typing import Awaitable, Callable, Dict, Optional
 
 from pyrogram import Client, filters
 from pyrogram.types import (
+    BotCommand,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -124,6 +125,13 @@ def build_help_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton("❓ Справка", callback_data=SHOW_HELP_DATA)]]
     )
+
+
+def build_bot_commands() -> "list[BotCommand]":
+    return [
+        BotCommand("start", "Запустить бота и показать справку"),
+        BotCommand("help", "Показать справку по использованию"),
+    ]
 
 
 async def refresh_status_message(batch: Batch, live: LiveProgress, status_message):
