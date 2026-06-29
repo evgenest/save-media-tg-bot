@@ -198,6 +198,15 @@ def create_app(config: Config, state: BotState) -> Client:
         on_batch_closed=on_batch_closed,
     )
 
+    @app.on_message(filters.command(["start", "help"]) & filters.private)
+    async def handle_help_commands(client: Client, message: Message) -> None:
+        if not is_allowed(message.from_user.id if message.from_user else None, config):
+            return
+
+        await message.reply_text(
+            build_help_text(config.batch_timeout), reply_markup=build_help_keyboard()
+        )
+
     @app.on_message(MEDIA_FILTER & filters.private)
     async def handle_media(client: Client, message: Message) -> None:
         if not is_allowed(message.from_user.id if message.from_user else None, config):
@@ -212,12 +221,19 @@ def create_app(config: Config, state: BotState) -> Client:
 
     @app.on_callback_query()
     async def handle_callback_query(client: Client, callback_query: CallbackQuery) -> None:
-        if callback_query.data != FINISH_BATCH_DATA:
+        if callback_query.data not in (FINISH_BATCH_DATA, SHOW_HELP_DATA):
             return
 
         user_id = callback_query.from_user.id
         if not is_allowed(user_id, config):
             await callback_query.answer()
+            return
+
+        if callback_query.data == SHOW_HELP_DATA:
+            await callback_query.answer()
+            await callback_query.message.reply_text(
+                build_help_text(config.batch_timeout), reply_markup=build_help_keyboard()
+            )
             return
 
         await batch_manager.close_batch(user_id)
