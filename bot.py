@@ -37,6 +37,26 @@ MEDIA_FILTER = (
     | filters.animation
 )
 
+STATUS_REFRESH_INTERVAL = 5.0
+
+
+async def run_status_ticker(user_id: int, batch_manager: BatchManager, state: BotState) -> None:
+    try:
+        while True:
+            await asyncio.sleep(STATUS_REFRESH_INTERVAL)
+            batch = batch_manager.get_active_batch(user_id)
+            if batch is None:
+                return
+            status_message = state.status_messages.get(user_id)
+            if status_message is None:
+                continue
+            live = state.live_progress.get(user_id, LiveProgress())
+            state.status_messages[user_id] = await refresh_status_message(
+                batch, live, status_message
+            )
+    except asyncio.CancelledError:
+        pass
+
 
 @dataclass
 class LiveProgress:
@@ -63,6 +83,7 @@ class BotState:
         self.status_messages: Dict[int, Message] = {}
         self.live_progress: Dict[int, LiveProgress] = {}
         self.locks: Dict[int, asyncio.Lock] = {}
+        self.ticker_tasks: Dict[int, asyncio.Task] = {}
 
     def get_lock(self, user_id: int) -> asyncio.Lock:
         lock = self.locks.get(user_id)
@@ -157,10 +178,14 @@ def create_app(config: Config, state: BotState) -> Client:
         batch_dir = create_batch_dir(config.storage_dir, batch.started_at)
         state.batch_dirs[batch.user_id] = batch_dir
         state.manifests[batch.user_id] = Manifest(batch_dir, batch.started_at)
+        state.live_progress[batch.user_id] = LiveProgress()
         status_message = await app.send_message(
             batch.user_id, build_status_text(batch), reply_markup=build_finish_keyboard()
         )
         state.status_messages[batch.user_id] = status_message
+        state.ticker_tasks[batch.user_id] = asyncio.create_task(
+            run_status_ticker(batch.user_id, batch_manager, state)
+        )
 
     async def on_file_added(batch: Batch, outcome: DownloadResult) -> None:
         manifest = state.manifests[batch.user_id]
@@ -176,15 +201,14 @@ def create_app(config: Config, state: BotState) -> Client:
                 error=outcome.error,
             )
         )
-        status_message = state.status_messages.get(batch.user_id)
-        if status_message is not None:
-            state.status_messages[batch.user_id] = await status_message.edit_text(
-                build_status_text(batch), reply_markup=build_finish_keyboard()
-            )
 
     async def on_batch_closed(batch: Batch) -> None:
         batch_dir = state.batch_dirs.pop(batch.user_id, None)
         state.manifests.pop(batch.user_id, None)
+        state.live_progress.pop(batch.user_id, None)
+        ticker_task = state.ticker_tasks.pop(batch.user_id, None)
+        if ticker_task is not None:
+            ticker_task.cancel()
         status_message = state.status_messages.pop(batch.user_id, None)
         if status_message is not None and batch_dir is not None:
             await status_message.edit_text(
