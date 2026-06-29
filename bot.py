@@ -23,6 +23,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mediasaver")
 
 FINISH_BATCH_DATA = "finish_batch"
+SHOW_HELP_DATA = "show_help"
 
 MEDIA_FILTER = (
     filters.photo
@@ -65,9 +66,12 @@ def is_allowed(user_id: Optional[int], config: Config) -> bool:
     return user_id is not None and user_id in config.allowed_user_ids
 
 
-def build_status_text(batch: Batch) -> str:
+def build_status_text(batch: Batch, live: Optional[LiveProgress] = None) -> str:
     size_mb = batch.total_bytes / (1024 * 1024)
     text = f"Сохранено: {batch.file_count} файлов, {size_mb:.1f} МБ"
+    if live is not None and live.current_name is not None:
+        percent = (live.current_bytes * 100 / live.current_total) if live.current_total else 0
+        text += f"\nСейчас: {live.current_name} — {percent:.0f}%"
     if batch.error_count:
         text += f"\nОшибок: {batch.error_count}"
     return text
@@ -104,6 +108,12 @@ def build_help_text(batch_timeout: float) -> str:
 def build_finish_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton("✅ Завершить пакет", callback_data=FINISH_BATCH_DATA)]]
+    )
+
+
+def build_help_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("❓ Справка", callback_data=SHOW_HELP_DATA)]]
     )
 
 
