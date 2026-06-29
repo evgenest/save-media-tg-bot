@@ -2,6 +2,8 @@ import asyncio
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from batch_manager import Batch
 from bot import BotState, LiveProgress, build_bot_commands, build_help_keyboard, build_help_text, build_status_text, create_app, make_progress_callback, refresh_status_message
 from config import Config
@@ -33,6 +35,27 @@ async def test_make_progress_callback_updates_live_state():
     assert live.current_name == "video.mp4"
     assert live.current_bytes == 50
     assert live.current_total == 200
+
+
+async def test_live_progress_current_name_cleared_even_if_download_raises():
+    # Mirrors the try/finally pattern in handle_media: progress is wired up
+    # before the download attempt, and current_name must be cleared back to
+    # None once that attempt is over, even if it raises instead of returning
+    # a normal DownloadResult.
+    live = LiveProgress()
+    callback = make_progress_callback(live, "video.mp4")
+
+    async def fake_download_media_message() -> None:
+        await callback(10, 100)
+        raise RuntimeError("simulated unexpected failure mid-download")
+
+    with pytest.raises(RuntimeError):
+        try:
+            await fake_download_media_message()
+        finally:
+            live.current_name = None
+
+    assert live.current_name is None
 
 
 def test_build_help_text_includes_batch_timeout():

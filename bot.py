@@ -223,10 +223,12 @@ def create_app(config: Config, state: BotState) -> Client:
             live = state.live_progress.setdefault(user_id, LiveProgress())
             progress = make_progress_callback(live, display_name)
 
-            outcome = await download_media_message(
-                client, message, batch_dir, date_str=date_str, progress=progress
-            )
-            live.current_name = None
+            try:
+                outcome = await download_media_message(
+                    client, message, batch_dir, date_str=date_str, progress=progress
+                )
+            finally:
+                live.current_name = None
             await batch_manager.record_file(user_id, outcome)
 
     @app.on_callback_query()
