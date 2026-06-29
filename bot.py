@@ -281,10 +281,12 @@ def create_app(config: Config, state: BotState) -> Client:
 async def run_bot(config: Config, state: BotState) -> None:
     app = create_app(config, state)
     await app.start()
-    await app.set_bot_commands(build_bot_commands())
-    logger.info("Starting mediasaver bot")
-    await idle()
-    await app.stop()
+    try:
+        await app.set_bot_commands(build_bot_commands())
+        logger.info("Starting mediasaver bot")
+        await idle()
+    finally:
+        await app.stop()
 
 
 def main() -> None:
