@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Awaitable, Callable, Dict, Optional
 
 from pyrogram import Client, filters
 from pyrogram.types import (
@@ -34,11 +35,30 @@ MEDIA_FILTER = (
 )
 
 
+@dataclass
+class LiveProgress:
+    current_name: Optional[str] = None
+    current_bytes: int = 0
+    current_total: int = 0
+
+
+def make_progress_callback(
+    live: LiveProgress, file_name: str
+) -> Callable[[int, int], Awaitable[None]]:
+    async def progress(current: int, total: int) -> None:
+        live.current_name = file_name
+        live.current_bytes = current
+        live.current_total = total
+
+    return progress
+
+
 class BotState:
     def __init__(self) -> None:
         self.batch_dirs: Dict[int, Path] = {}
         self.manifests: Dict[int, Manifest] = {}
         self.status_messages: Dict[int, Message] = {}
+        self.live_progress: Dict[int, LiveProgress] = {}
 
 
 def is_allowed(user_id: Optional[int], config: Config) -> bool:

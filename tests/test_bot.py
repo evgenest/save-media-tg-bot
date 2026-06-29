@@ -1,7 +1,7 @@
 import asyncio
 from pathlib import Path
 
-from bot import BotState, create_app
+from bot import BotState, LiveProgress, create_app, make_progress_callback
 from config import Config
 
 
@@ -14,6 +14,17 @@ def make_test_config(tmp_path: Path) -> Config:
         storage_dir=tmp_path,
         batch_timeout=30.0,
     )
+
+
+async def test_make_progress_callback_updates_live_state():
+    live = LiveProgress()
+    callback = make_progress_callback(live, "video.mp4")
+
+    await callback(50, 200)
+
+    assert live.current_name == "video.mp4"
+    assert live.current_bytes == 50
+    assert live.current_total == 200
 
 
 def test_create_app_builds_without_network_access(tmp_path):
