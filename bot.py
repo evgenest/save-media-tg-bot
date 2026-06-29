@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable, Dict, Optional
 
-from pyrogram import Client, filters
+from pyrogram import Client, filters, idle
 from pyrogram.types import (
     BotCommand,
     CallbackQuery,
@@ -278,12 +278,19 @@ def create_app(config: Config, state: BotState) -> Client:
     return app
 
 
+async def run_bot(config: Config, state: BotState) -> None:
+    app = create_app(config, state)
+    await app.start()
+    await app.set_bot_commands(build_bot_commands())
+    logger.info("Starting mediasaver bot")
+    await idle()
+    await app.stop()
+
+
 def main() -> None:
     config = load_config(os.environ)
     config.storage_dir.mkdir(parents=True, exist_ok=True)
-    app = create_app(config, BotState())
-    logger.info("Starting mediasaver bot")
-    app.run()
+    asyncio.run(run_bot(config, BotState()))
 
 
 if __name__ == "__main__":
