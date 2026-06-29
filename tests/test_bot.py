@@ -120,3 +120,18 @@ async def test_refresh_status_message_swallows_edit_errors():
     result = await refresh_status_message(batch, live, message)
 
     assert result is message
+
+
+def test_get_lock_returns_same_lock_for_same_user():
+    state = BotState()
+
+    lock1 = state.get_lock(1)
+    lock2 = state.get_lock(1)
+
+    assert lock1 is lock2
+
+
+def test_get_lock_returns_different_locks_for_different_users():
+    state = BotState()
+
+    assert state.get_lock(1) is not state.get_lock(2)

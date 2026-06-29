@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from dataclasses import dataclass
@@ -60,6 +61,14 @@ class BotState:
         self.manifests: Dict[int, Manifest] = {}
         self.status_messages: Dict[int, Message] = {}
         self.live_progress: Dict[int, LiveProgress] = {}
+        self.locks: Dict[int, asyncio.Lock] = {}
+
+    def get_lock(self, user_id: int) -> asyncio.Lock:
+        lock = self.locks.get(user_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self.locks[user_id] = lock
+        return lock
 
 
 def is_allowed(user_id: Optional[int], config: Config) -> bool:
