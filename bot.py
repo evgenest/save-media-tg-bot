@@ -117,6 +117,16 @@ def build_help_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+async def refresh_status_message(batch: Batch, live: LiveProgress, status_message):
+    try:
+        return await status_message.edit_text(
+            build_status_text(batch, live), reply_markup=build_finish_keyboard()
+        )
+    except Exception:
+        logger.exception("Failed to refresh status message for user %s", batch.user_id)
+        return status_message
+
+
 def create_app(config: Config, state: BotState) -> Client:
     app = Client(
         "mediasaver_bot",

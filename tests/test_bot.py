@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 from batch_manager import Batch
-from bot import BotState, LiveProgress, build_help_keyboard, build_help_text, build_status_text, create_app, make_progress_callback
+from bot import BotState, LiveProgress, build_help_keyboard, build_help_text, build_status_text, create_app, make_progress_callback, refresh_status_message
 from config import Config
 
 
@@ -86,3 +86,37 @@ def test_create_app_builds_without_network_access(tmp_path):
     # bookkeeping coroutines on the event loop; give them one tick to complete
     # so they don't get garbage-collected later and trigger RuntimeWarning.
     app.loop.run_until_complete(asyncio.sleep(0))
+
+
+class FakeStatusMessage:
+    def __init__(self, fail: bool = False):
+        self.fail = fail
+        self.edits: "list[tuple]" = []
+
+    async def edit_text(self, text, reply_markup=None):
+        self.edits.append((text, reply_markup))
+        if self.fail:
+            raise RuntimeError("flood wait")
+        return self
+
+
+async def test_refresh_status_message_edits_with_latest_text():
+    batch = make_batch(file_count=2, total_bytes=2048)
+    live = LiveProgress(current_name="a.jpg", current_bytes=10, current_total=20)
+    message = FakeStatusMessage()
+
+    result = await refresh_status_message(batch, live, message)
+
+    assert result is message
+    assert len(message.edits) == 1
+    assert "a.jpg — 50%" in message.edits[0][0]
+
+
+async def test_refresh_status_message_swallows_edit_errors():
+    batch = make_batch(file_count=1, total_bytes=0)
+    live = LiveProgress()
+    message = FakeStatusMessage(fail=True)
+
+    result = await refresh_status_message(batch, live, message)
+
+    assert result is message
