@@ -18,7 +18,7 @@ from pyrogram.types import (
 
 from batch_manager import Batch, BatchManager
 from config import Config, load_config
-from downloader import DownloadResult, download_media_message
+from downloader import DownloadResult, download_media_message, extract_media_info
 from storage import Manifest, ManifestEntry, create_batch_dir
 
 logging.basicConfig(level=logging.INFO)
@@ -213,11 +213,21 @@ def create_app(config: Config, state: BotState) -> Client:
             return
 
         user_id = message.from_user.id
-        await batch_manager.ensure_batch(user_id)
-        batch_dir = state.batch_dirs[user_id]
-        date_str = message.date.strftime("%Y%m%d-%H%M%S")
-        outcome = await download_media_message(client, message, batch_dir, date_str=date_str)
-        await batch_manager.record_file(user_id, outcome)
+        async with state.get_lock(user_id):
+            await batch_manager.ensure_batch(user_id)
+            batch_dir = state.batch_dirs[user_id]
+            date_str = message.date.strftime("%Y%m%d-%H%M%S")
+
+            media_info = extract_media_info(message)
+            display_name = (media_info.file_name if media_info else None) or "файл"
+            live = state.live_progress.setdefault(user_id, LiveProgress())
+            progress = make_progress_callback(live, display_name)
+
+            outcome = await download_media_message(
+                client, message, batch_dir, date_str=date_str, progress=progress
+            )
+            live.current_name = None
+            await batch_manager.record_file(user_id, outcome)
 
     @app.on_callback_query()
     async def handle_callback_query(client: Client, callback_query: CallbackQuery) -> None:
