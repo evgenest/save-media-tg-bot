@@ -39,9 +39,11 @@ class StubClient:
     def __init__(self, fail_times: int = 0):
         self.fail_times = fail_times
         self.calls: "list[str]" = []
+        self.progress_calls: "list[object]" = []
 
-    async def download_media(self, message, file_name: str) -> str:
+    async def download_media(self, message, file_name: str, progress=None) -> str:
         self.calls.append(file_name)
+        self.progress_calls.append(progress)
         if self.fail_times > 0:
             self.fail_times -= 1
             raise RuntimeError("network error")
@@ -154,3 +156,15 @@ async def test_download_media_message_uses_default_filename_when_missing(tmp_pat
     result = await download_media_message(client, message, tmp_path, date_str="20260628-143005")
 
     assert result.stored_name == "photo_20260628-143005_11.jpg"
+
+
+async def test_download_media_message_forwards_progress_callback(tmp_path):
+    message = FakeMessage(id=12, document=FakeMedia(file_name="report.pdf"))
+    client = StubClient()
+
+    async def progress(current, total):
+        pass
+
+    await download_media_message(client, message, tmp_path, date_str="d", progress=progress)
+
+    assert client.progress_calls == [progress]
