@@ -52,6 +52,7 @@ class BatchManager:
         self._clock = clock
         self._active: Dict[int, Batch] = {}
         self._timers: Dict[int, TimerHandle] = {}
+        self._downloading: "set[int]" = set()
 
     def get_active_batch(self, user_id: int) -> Optional[Batch]:
         return self._active.get(user_id)
@@ -85,6 +86,15 @@ class BatchManager:
         self._cancel_timer(user_id)
         await self._on_batch_closed(batch)
         return batch
+
+    def begin_download(self, user_id: int) -> None:
+        self._downloading.add(user_id)
+        self._cancel_timer(user_id)
+
+    def end_download(self, user_id: int) -> None:
+        self._downloading.discard(user_id)
+        if self.get_active_batch(user_id) is not None:
+            self._reset_timer(user_id)
 
     def _reset_timer(self, user_id: int) -> None:
         self._cancel_timer(user_id)

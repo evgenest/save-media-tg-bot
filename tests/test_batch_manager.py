@@ -181,3 +181,49 @@ async def test_two_users_have_independent_batches_and_timers():
 
     assert h.manager.get_active_batch(1) is None
     assert h.manager.get_active_batch(2) is not None
+
+
+async def test_begin_download_cancels_pending_timer():
+    h = make_harness()
+    await h.manager.ensure_batch(user_id=1)
+    await h.manager.record_file(user_id=1, outcome=make_outcome())
+    armed_count_before = len(h.timer_factory.handles)
+
+    h.manager.begin_download(user_id=1)
+
+    assert h.timer_factory.latest.cancelled is True
+    assert len(h.timer_factory.handles) == armed_count_before
+
+
+async def test_timer_cannot_fire_while_download_in_progress():
+    h = make_harness()
+    await h.manager.ensure_batch(user_id=1)
+
+    h.manager.begin_download(user_id=1)
+
+    assert all(handle.cancelled for handle in h.timer_factory.handles)
+
+
+async def test_end_download_rearms_timer_for_active_batch():
+    h = make_harness()
+    await h.manager.ensure_batch(user_id=1)
+    h.manager.begin_download(user_id=1)
+
+    h.manager.end_download(user_id=1)
+
+    assert h.timer_factory.latest.cancelled is False
+    assert h.timer_factory.latest.delay == 30
+
+
+async def test_end_download_does_not_rearm_timer_after_batch_closed():
+    h = make_harness()
+    await h.manager.ensure_batch(user_id=1)
+    await h.manager.record_file(user_id=1, outcome=make_outcome())
+    await h.manager.close_batch(1)
+    armed_count_before = len(h.timer_factory.handles)
+
+    h.manager.end_download(user_id=1)
+
+    assert len(h.timer_factory.handles) == armed_count_before
+    assert h.timer_factory.latest.cancelled is True
+    assert h.manager.get_active_batch(1) is None
