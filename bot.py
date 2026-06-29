@@ -85,6 +85,22 @@ def build_summary_text(batch: Batch, batch_dir: Path) -> str:
     return text
 
 
+def build_help_text(batch_timeout: float) -> str:
+    timeout_seconds = int(batch_timeout)
+    return (
+        "👋 Привет! Этот бот сохраняет медиафайлы, которые вы ему пересылаете.\n\n"
+        "Как это работает:\n"
+        "1. Пришлите (перешлите) одно или несколько сообщений с фото, видео, "
+        "аудио или документами.\n"
+        "2. Бот скачивает их по одному и показывает статус — сколько файлов "
+        "сохранено и что скачивается прямо сейчас.\n"
+        "3. Нажмите «✅ Завершить пакет» под статусом, либо просто не "
+        f"присылайте файлы {timeout_seconds} секунд — пакет закроется сам.\n"
+        "4. В конце вы получите итог: количество файлов и общий размер.\n\n"
+        "Эта справка доступна в любой момент — командой /help или кнопкой ниже."
+    )
+
+
 def build_finish_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton("✅ Завершить пакет", callback_data=FINISH_BATCH_DATA)]]

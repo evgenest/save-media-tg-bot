@@ -1,7 +1,7 @@
 import asyncio
 from pathlib import Path
 
-from bot import BotState, LiveProgress, create_app, make_progress_callback
+from bot import BotState, LiveProgress, build_help_text, create_app, make_progress_callback
 from config import Config
 
 
@@ -25,6 +25,17 @@ async def test_make_progress_callback_updates_live_state():
     assert live.current_name == "video.mp4"
     assert live.current_bytes == 50
     assert live.current_total == 200
+
+
+def test_build_help_text_includes_batch_timeout():
+    text = build_help_text(45.0)
+    assert "45 секунд" in text
+
+
+def test_build_help_text_mentions_finish_button_and_help_command():
+    text = build_help_text(30.0)
+    assert "Завершить пакет" in text
+    assert "/help" in text
 
 
 def test_create_app_builds_without_network_access(tmp_path):
