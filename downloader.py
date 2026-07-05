@@ -34,6 +34,10 @@ def build_default_filename(
     media_type: str, message_id: int, date_str: str, mime_type: Optional[str]
 ) -> str:
     extension = mimetypes.guess_extension(mime_type) if mime_type else None
+    if extension is None and media_type == "photo":
+        # Telegram always sends photos as JPEG; Pyrogram's Photo objects
+        # carry no mime_type, so this case can't be inferred otherwise.
+        extension = ".jpg"
     return f"{media_type}_{date_str}_{message_id}{extension or ''}"
 
 

@@ -86,6 +86,11 @@ def test_build_default_filename_without_mime_type():
     assert name == "document_20260628-143005_42"
 
 
+def test_build_default_filename_photo_without_mime_type_defaults_to_jpg():
+    name = build_default_filename("photo", 42, "20260628-143005", None)
+    assert name == "photo_20260628-143005_42.jpg"
+
+
 def test_extract_media_info_returns_none_for_text_message():
     assert extract_media_info(FakeMessage(id=1)) is None
 
@@ -156,6 +161,17 @@ async def test_download_media_message_uses_default_filename_when_missing(tmp_pat
     result = await download_media_message(client, message, tmp_path, date_str="20260628-143005")
 
     assert result.stored_name == "photo_20260628-143005_11.jpg"
+
+
+async def test_download_media_message_photo_without_mime_type_gets_jpg_extension(tmp_path):
+    # Pyrogram's Photo objects have no mime_type attribute at all, so this
+    # is the realistic shape for photos forwarded as photos (not as files).
+    message = FakeMessage(id=13, photo=FakeMedia())
+    client = StubClient()
+
+    result = await download_media_message(client, message, tmp_path, date_str="20260628-143005")
+
+    assert result.stored_name == "photo_20260628-143005_13.jpg"
 
 
 async def test_download_media_message_forwards_progress_callback(tmp_path):
