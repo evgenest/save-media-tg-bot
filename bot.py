@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Awaitable, Callable, Dict, Optional
 
@@ -16,7 +17,7 @@ from pyrogram.types import (
     Message,
 )
 
-from batch_manager import Batch, BatchManager
+from batch_manager import Batch, BatchManager, BatchPhase
 from config import Config, load_config
 from downloader import DownloadResult, download_media_message, extract_media_info
 from storage import Manifest, ManifestEntry, create_batch_dir
@@ -40,19 +41,18 @@ MEDIA_FILTER = (
 STATUS_REFRESH_INTERVAL = 5.0
 
 
-async def run_status_ticker(user_id: int, batch_manager: BatchManager, state: BotState) -> None:
+async def run_status_ticker(batch: Batch, state: BotState, batch_timeout: float) -> None:
     try:
         while True:
             await asyncio.sleep(STATUS_REFRESH_INTERVAL)
-            batch = batch_manager.get_active_batch(user_id)
-            if batch is None:
+            if batch.phase == BatchPhase.CLOSED:
                 return
-            status_message = state.status_messages.get(user_id)
+            status_message = state.status_messages.get(batch.batch_id)
             if status_message is None:
                 continue
-            live = state.live_progress.get(user_id, LiveProgress())
-            state.status_messages[user_id] = await refresh_status_message(
-                batch, live, status_message
+            live = state.live_progress.get(batch.batch_id, LiveProgress())
+            state.status_messages[batch.batch_id] = await refresh_status_message(
+                batch, live, status_message, batch_timeout
             )
     except asyncio.CancelledError:
         pass
@@ -77,24 +77,30 @@ def make_progress_callback(
 
 
 class BotState:
+    """All dicts below are keyed by Batch.batch_id, not user_id - a user can
+    have a PENDING batch collecting files while a previous batch is still
+    downloading, each with its own status message and ticker."""
+
     def __init__(self) -> None:
         self.batch_dirs: Dict[int, Path] = {}
         self.manifests: Dict[int, Manifest] = {}
         self.status_messages: Dict[int, Message] = {}
         self.live_progress: Dict[int, LiveProgress] = {}
-        self.locks: Dict[int, asyncio.Lock] = {}
         self.ticker_tasks: Dict[int, asyncio.Task] = {}
-
-    def get_lock(self, user_id: int) -> asyncio.Lock:
-        lock = self.locks.get(user_id)
-        if lock is None:
-            lock = asyncio.Lock()
-            self.locks[user_id] = lock
-        return lock
 
 
 def is_allowed(user_id: Optional[int], config: Config) -> bool:
     return user_id is not None and user_id in config.allowed_user_ids
+
+
+def build_pending_text(batch: Batch, batch_timeout: float) -> str:
+    elapsed = (datetime.now() - batch.last_activity_at).total_seconds()
+    remaining = max(0.0, batch_timeout - elapsed)
+    return (
+        f"В очереди: {batch.queued_count} файлов\n"
+        f"Скачивание начнётся через {remaining:.0f} сек — либо нажмите "
+        "«⬇️ Скачать сейчас», чтобы начать сразу."
+    )
 
 
 def build_status_text(batch: Batch, live: Optional[LiveProgress] = None) -> str:
@@ -127,10 +133,11 @@ def build_help_text(batch_timeout: float) -> str:
         "Как это работает:\n"
         "1. Пришлите (перешлите) одно или несколько сообщений с фото, видео, "
         "аудио или документами.\n"
-        "2. Бот скачивает их по одному и показывает статус — сколько файлов "
+        "2. Бот покажет, сколько файлов в очереди, и начнёт скачивание через "
+        f"{timeout_seconds} секунд после последнего файла — либо сразу, если "
+        "нажать «⬇️ Скачать сейчас».\n"
+        "3. Во время скачивания статус показывает, сколько файлов уже "
         "сохранено и что скачивается прямо сейчас.\n"
-        "3. Нажмите «✅ Завершить пакет» под статусом, либо просто не "
-        f"присылайте файлы {timeout_seconds} секунд — пакет закроется сам.\n"
         "4. В конце вы получите итог: количество файлов и общий размер.\n\n"
         "Эта справка доступна в любой момент — командой /help или кнопкой ниже."
     )
@@ -138,7 +145,7 @@ def build_help_text(batch_timeout: float) -> str:
 
 def build_finish_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("✅ Завершить пакет", callback_data=FINISH_BATCH_DATA)]]
+        [[InlineKeyboardButton("⬇️ Скачать сейчас", callback_data=FINISH_BATCH_DATA)]]
     )
 
 
@@ -155,11 +162,17 @@ def build_bot_commands() -> "list[BotCommand]":
     ]
 
 
-async def refresh_status_message(batch: Batch, live: LiveProgress, status_message):
+async def refresh_status_message(
+    batch: Batch, live: LiveProgress, status_message, batch_timeout: float
+):
     try:
-        return await status_message.edit_text(
-            build_status_text(batch, live), reply_markup=build_finish_keyboard()
-        )
+        if batch.phase == BatchPhase.PENDING:
+            text = build_pending_text(batch, batch_timeout)
+            markup = build_finish_keyboard()
+        else:
+            text = build_status_text(batch, live)
+            markup = None
+        return await status_message.edit_text(text, reply_markup=markup)
     except Exception:
         logger.exception("Failed to refresh status message for user %s", batch.user_id)
         return status_message
@@ -176,19 +189,47 @@ def create_app(config: Config, state: BotState) -> Client:
 
     async def on_batch_created(batch: Batch) -> None:
         batch_dir = create_batch_dir(config.storage_dir, batch.started_at)
-        state.batch_dirs[batch.user_id] = batch_dir
-        state.manifests[batch.user_id] = Manifest(batch_dir, batch.started_at)
-        state.live_progress[batch.user_id] = LiveProgress()
+        state.batch_dirs[batch.batch_id] = batch_dir
+        state.manifests[batch.batch_id] = Manifest(batch_dir, batch.started_at)
+        state.live_progress[batch.batch_id] = LiveProgress()
         status_message = await app.send_message(
-            batch.user_id, build_status_text(batch), reply_markup=build_finish_keyboard()
+            batch.user_id,
+            build_pending_text(batch, config.batch_timeout),
+            reply_markup=build_finish_keyboard(),
         )
-        state.status_messages[batch.user_id] = status_message
-        state.ticker_tasks[batch.user_id] = asyncio.create_task(
-            run_status_ticker(batch.user_id, batch_manager, state)
+        state.status_messages[batch.batch_id] = status_message
+        state.ticker_tasks[batch.batch_id] = asyncio.create_task(
+            run_status_ticker(batch, state, config.batch_timeout)
         )
 
-    async def on_file_added(batch: Batch, outcome: DownloadResult) -> None:
-        manifest = state.manifests[batch.user_id]
+    async def on_batch_sealed(batch: Batch) -> None:
+        status_message = state.status_messages.get(batch.batch_id)
+        if status_message is None:
+            return
+        live = state.live_progress.get(batch.batch_id, LiveProgress())
+        state.status_messages[batch.batch_id] = await status_message.edit_text(
+            build_status_text(batch, live), reply_markup=None
+        )
+
+    async def on_download_file(batch: Batch, message: Message) -> DownloadResult:
+        batch_dir = state.batch_dirs[batch.batch_id]
+        date_str = message.date.strftime("%Y%m%d-%H%M%S")
+
+        media_info = extract_media_info(message)
+        display_name = (media_info.file_name if media_info else None) or "файл"
+        live = state.live_progress.setdefault(batch.batch_id, LiveProgress())
+        progress = make_progress_callback(live, display_name)
+
+        try:
+            outcome = await download_media_message(
+                app, message, batch_dir, date_str=date_str, progress=progress
+            )
+        finally:
+            live.current_name = None
+        return outcome
+
+    async def on_file_downloaded(batch: Batch, outcome: DownloadResult) -> None:
+        manifest = state.manifests[batch.batch_id]
         manifest.add_entry(
             ManifestEntry(
                 message_id=outcome.message_id,
@@ -203,13 +244,13 @@ def create_app(config: Config, state: BotState) -> Client:
         )
 
     async def on_batch_closed(batch: Batch) -> None:
-        batch_dir = state.batch_dirs.pop(batch.user_id, None)
-        state.manifests.pop(batch.user_id, None)
-        state.live_progress.pop(batch.user_id, None)
-        ticker_task = state.ticker_tasks.pop(batch.user_id, None)
+        batch_dir = state.batch_dirs.pop(batch.batch_id, None)
+        state.manifests.pop(batch.batch_id, None)
+        state.live_progress.pop(batch.batch_id, None)
+        ticker_task = state.ticker_tasks.pop(batch.batch_id, None)
         if ticker_task is not None:
             ticker_task.cancel()
-        status_message = state.status_messages.pop(batch.user_id, None)
+        status_message = state.status_messages.pop(batch.batch_id, None)
         if status_message is not None and batch_dir is not None:
             await status_message.edit_text(
                 build_summary_text(batch, batch_dir), reply_markup=None
@@ -218,7 +259,9 @@ def create_app(config: Config, state: BotState) -> Client:
     batch_manager = BatchManager(
         batch_timeout=config.batch_timeout,
         on_batch_created=on_batch_created,
-        on_file_added=on_file_added,
+        on_batch_sealed=on_batch_sealed,
+        on_download_file=on_download_file,
+        on_file_downloaded=on_file_downloaded,
         on_batch_closed=on_batch_closed,
     )
 
@@ -237,27 +280,7 @@ def create_app(config: Config, state: BotState) -> Client:
             return
 
         user_id = message.from_user.id
-        async with state.get_lock(user_id):
-            await batch_manager.ensure_batch(user_id)
-            batch_dir = state.batch_dirs[user_id]
-            date_str = message.date.strftime("%Y%m%d-%H%M%S")
-
-            media_info = extract_media_info(message)
-            display_name = (media_info.file_name if media_info else None) or "файл"
-            live = state.live_progress.setdefault(user_id, LiveProgress())
-            progress = make_progress_callback(live, display_name)
-
-            batch_manager.begin_download(user_id)
-            try:
-                try:
-                    outcome = await download_media_message(
-                        client, message, batch_dir, date_str=date_str, progress=progress
-                    )
-                finally:
-                    live.current_name = None
-                await batch_manager.record_file(user_id, outcome)
-            finally:
-                batch_manager.end_download(user_id)
+        await batch_manager.enqueue(user_id, message)
 
     @app.on_callback_query()
     async def handle_callback_query(client: Client, callback_query: CallbackQuery) -> None:
@@ -276,8 +299,11 @@ def create_app(config: Config, state: BotState) -> Client:
             )
             return
 
-        await batch_manager.close_batch(user_id)
-        await callback_query.answer("Пакет завершён")
+        sealed = await batch_manager.seal_batch(user_id)
+        if sealed is not None:
+            await callback_query.answer("Скачивание начинается")
+        else:
+            await callback_query.answer()
 
     return app
 

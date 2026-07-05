@@ -4,13 +4,26 @@ from pathlib import Path
 
 import pytest
 
-from batch_manager import Batch
-from bot import BotState, LiveProgress, build_bot_commands, build_help_keyboard, build_help_text, build_status_text, create_app, make_progress_callback, refresh_status_message
+from batch_manager import Batch, BatchPhase
+from bot import (
+    BotState,
+    LiveProgress,
+    build_bot_commands,
+    build_finish_keyboard,
+    build_help_keyboard,
+    build_help_text,
+    build_pending_text,
+    build_status_text,
+    create_app,
+    make_progress_callback,
+    refresh_status_message,
+)
 from config import Config
 
 
 def make_batch(**overrides):
-    defaults = dict(user_id=1, started_at=datetime(2026, 6, 28, 12, 0, 0))
+    now = datetime(2026, 6, 28, 12, 0, 0)
+    defaults = dict(batch_id=1, user_id=1, started_at=now, last_activity_at=now)
     defaults.update(overrides)
     return Batch(**defaults)
 
@@ -38,7 +51,7 @@ async def test_make_progress_callback_updates_live_state():
 
 
 async def test_live_progress_current_name_cleared_even_if_download_raises():
-    # Mirrors the try/finally pattern in handle_media: progress is wired up
+    # Mirrors the try/finally pattern in on_download_file: progress is wired up
     # before the download attempt, and current_name must be cleared back to
     # None once that attempt is over, even if it raises instead of returning
     # a normal DownloadResult.
@@ -63,10 +76,28 @@ def test_build_help_text_includes_batch_timeout():
     assert "45 секунд" in text
 
 
-def test_build_help_text_mentions_finish_button_and_help_command():
+def test_build_help_text_mentions_download_now_button_and_help_command():
     text = build_help_text(30.0)
-    assert "Завершить пакет" in text
+    assert "Скачать сейчас" in text
     assert "/help" in text
+
+
+def test_build_pending_text_shows_queued_count_and_countdown():
+    batch = make_batch(last_activity_at=datetime.now())
+    batch.queued_messages.extend(["a", "b"])
+
+    text = build_pending_text(batch, batch_timeout=30.0)
+
+    assert "В очереди: 2 файлов" in text
+    assert "30 сек" in text
+    assert "Скачать сейчас" in text
+
+
+def test_build_finish_keyboard_label_reflects_download_now_semantics():
+    keyboard = build_finish_keyboard()
+    button = keyboard.inline_keyboard[0][0]
+    assert button.callback_data == "finish_batch"
+    assert "Скачать сейчас" in button.text
 
 
 def test_build_status_text_without_live_progress_is_unchanged():
@@ -123,41 +154,41 @@ class FakeStatusMessage:
         return self
 
 
-async def test_refresh_status_message_edits_with_latest_text():
-    batch = make_batch(file_count=2, total_bytes=2048)
+async def test_refresh_status_message_shows_pending_text_with_keyboard():
+    batch = make_batch(phase=BatchPhase.PENDING)
+    batch.queued_messages.append("a")
+    live = LiveProgress()
+    message = FakeStatusMessage()
+
+    result = await refresh_status_message(batch, live, message, batch_timeout=30.0)
+
+    assert result is message
+    text, markup = message.edits[0]
+    assert "В очереди: 1 файлов" in text
+    assert markup is not None
+
+
+async def test_refresh_status_message_shows_downloading_text_without_keyboard():
+    batch = make_batch(phase=BatchPhase.DOWNLOADING, file_count=2, total_bytes=2048)
     live = LiveProgress(current_name="a.jpg", current_bytes=10, current_total=20)
     message = FakeStatusMessage()
 
-    result = await refresh_status_message(batch, live, message)
+    result = await refresh_status_message(batch, live, message, batch_timeout=30.0)
 
     assert result is message
-    assert len(message.edits) == 1
-    assert "a.jpg — 50%" in message.edits[0][0]
+    text, markup = message.edits[0]
+    assert "a.jpg — 50%" in text
+    assert markup is None
 
 
 async def test_refresh_status_message_swallows_edit_errors():
-    batch = make_batch(file_count=1, total_bytes=0)
+    batch = make_batch(phase=BatchPhase.DOWNLOADING, file_count=1, total_bytes=0)
     live = LiveProgress()
     message = FakeStatusMessage(fail=True)
 
-    result = await refresh_status_message(batch, live, message)
+    result = await refresh_status_message(batch, live, message, batch_timeout=30.0)
 
     assert result is message
-
-
-def test_get_lock_returns_same_lock_for_same_user():
-    state = BotState()
-
-    lock1 = state.get_lock(1)
-    lock2 = state.get_lock(1)
-
-    assert lock1 is lock2
-
-
-def test_get_lock_returns_different_locks_for_different_users():
-    state = BotState()
-
-    assert state.get_lock(1) is not state.get_lock(2)
 
 
 def test_build_bot_commands_includes_start_and_help():

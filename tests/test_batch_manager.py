@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -5,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from batch_manager import BatchManager
+from batch_manager import BatchManager, BatchPhase
 from downloader import DownloadResult
 
 
@@ -37,25 +38,39 @@ class FakeTimerFactory:
 class Harness:
     manager: BatchManager
     on_batch_created: AsyncMock
-    on_file_added: AsyncMock
+    on_batch_sealed: AsyncMock
+    on_download_file: AsyncMock
+    on_file_downloaded: AsyncMock
     on_batch_closed: AsyncMock
     timer_factory: FakeTimerFactory
 
 
 def make_harness() -> Harness:
     on_batch_created = AsyncMock()
-    on_file_added = AsyncMock()
+    on_batch_sealed = AsyncMock()
+    on_download_file = AsyncMock(return_value=make_outcome())
+    on_file_downloaded = AsyncMock()
     on_batch_closed = AsyncMock()
     timer_factory = FakeTimerFactory()
     manager = BatchManager(
         batch_timeout=30,
         on_batch_created=on_batch_created,
-        on_file_added=on_file_added,
+        on_batch_sealed=on_batch_sealed,
+        on_download_file=on_download_file,
+        on_file_downloaded=on_file_downloaded,
         on_batch_closed=on_batch_closed,
         timer_factory=timer_factory,
         clock=lambda: datetime(2026, 6, 28, 12, 0, 0),
     )
-    return Harness(manager, on_batch_created, on_file_added, on_batch_closed, timer_factory)
+    return Harness(
+        manager,
+        on_batch_created,
+        on_batch_sealed,
+        on_download_file,
+        on_file_downloaded,
+        on_batch_closed,
+        timer_factory,
+    )
 
 
 def make_outcome(success=True, size_bytes=100) -> DownloadResult:
@@ -73,51 +88,30 @@ def make_outcome(success=True, size_bytes=100) -> DownloadResult:
     )
 
 
-async def test_ensure_batch_creates_new_batch_once():
+async def drain() -> None:
+    """Let scheduled tasks (worker, timer callbacks) run up to their next await."""
+    for _ in range(5):
+        await asyncio.sleep(0)
+
+
+async def test_enqueue_creates_batch_once_and_reuses_it():
     h = make_harness()
 
-    batch1 = await h.manager.ensure_batch(user_id=1)
-    batch2 = await h.manager.ensure_batch(user_id=1)
+    batch1 = await h.manager.enqueue(1, "msg-1")
+    batch2 = await h.manager.enqueue(1, "msg-2")
 
     assert batch1 is batch2
+    assert batch1.queued_count == 2
+    assert batch1.phase == BatchPhase.PENDING
     h.on_batch_created.assert_awaited_once_with(batch1)
 
 
-async def test_record_file_without_active_batch_raises():
+async def test_enqueue_resets_timer_on_each_call():
     h = make_harness()
 
-    with pytest.raises(RuntimeError, match="No active batch"):
-        await h.manager.record_file(user_id=1, outcome=make_outcome())
-
-
-async def test_record_file_increments_counters_and_notifies():
-    h = make_harness()
-    await h.manager.ensure_batch(user_id=1)
-
-    batch = await h.manager.record_file(user_id=1, outcome=make_outcome(size_bytes=512))
-
-    assert batch.file_count == 1
-    assert batch.total_bytes == 512
-    assert batch.error_count == 0
-    h.on_file_added.assert_awaited_once()
-
-
-async def test_record_file_counts_failed_outcome_as_error():
-    h = make_harness()
-    await h.manager.ensure_batch(user_id=1)
-
-    batch = await h.manager.record_file(user_id=1, outcome=make_outcome(success=False))
-
-    assert batch.error_count == 1
-
-
-async def test_record_file_resets_timer_on_each_call():
-    h = make_harness()
-    await h.manager.ensure_batch(user_id=1)
-
-    await h.manager.record_file(user_id=1, outcome=make_outcome())
+    await h.manager.enqueue(1, "msg-1")
     first_handle = h.timer_factory.latest
-    await h.manager.record_file(user_id=1, outcome=make_outcome())
+    await h.manager.enqueue(1, "msg-2")
     second_handle = h.timer_factory.latest
 
     assert first_handle.cancelled is True
@@ -125,105 +119,112 @@ async def test_record_file_resets_timer_on_each_call():
     assert second_handle.delay == 30
 
 
-async def test_record_file_resets_timer_even_if_on_file_added_raises():
+async def test_seal_batch_with_no_active_batch_returns_none_and_does_not_notify():
     h = make_harness()
-    await h.manager.ensure_batch(user_id=1)
-    h.on_file_added.side_effect = RuntimeError("flood wait")
 
-    with pytest.raises(RuntimeError, match="flood wait"):
-        await h.manager.record_file(user_id=1, outcome=make_outcome())
+    result = await h.manager.seal_batch(1)
 
-    assert h.timer_factory.latest.cancelled is False
-    assert h.timer_factory.latest.delay == 30
+    assert result is None
+    h.on_batch_sealed.assert_not_awaited()
 
 
-async def test_timer_firing_closes_the_batch():
+async def test_seal_batch_cancels_pending_timer_and_downloads_queued_files():
     h = make_harness()
-    await h.manager.ensure_batch(user_id=1)
-    await h.manager.record_file(user_id=1, outcome=make_outcome())
+    await h.manager.enqueue(1, "msg-1")
+    await h.manager.enqueue(1, "msg-2")
+
+    sealed = await h.manager.seal_batch(1)
+    await drain()
+
+    assert sealed.phase == BatchPhase.CLOSED
+    assert h.timer_factory.latest.cancelled is True
+    assert h.manager.get_active_batch(1) is None
+    h.on_batch_sealed.assert_awaited_once()
+    assert h.on_download_file.await_count == 2
+    assert h.on_file_downloaded.await_count == 2
+    h.on_batch_closed.assert_awaited_once_with(sealed)
+    assert sealed.file_count == 2
+    assert sealed.total_bytes == 200
+
+
+async def test_timer_firing_seals_and_downloads_the_batch():
+    h = make_harness()
+    await h.manager.enqueue(1, "msg-1")
 
     await h.timer_factory.latest.callback()
+    await drain()
 
     assert h.manager.get_active_batch(1) is None
+    h.on_batch_sealed.assert_awaited_once()
     h.on_batch_closed.assert_awaited_once()
 
 
-async def test_close_batch_via_button_cancels_pending_timer():
+async def test_failed_download_counts_as_error_but_does_not_stop_batch():
     h = make_harness()
-    await h.manager.ensure_batch(user_id=1)
-    await h.manager.record_file(user_id=1, outcome=make_outcome())
+    h.on_download_file.side_effect = [make_outcome(success=False), make_outcome(success=True)]
+    await h.manager.enqueue(1, "msg-1")
+    await h.manager.enqueue(1, "msg-2")
 
-    closed = await h.manager.close_batch(1)
+    sealed = await h.manager.seal_batch(1)
+    await drain()
 
-    assert closed is not None
-    assert h.timer_factory.latest.cancelled is True
-    h.on_batch_closed.assert_awaited_once_with(closed)
+    assert sealed.error_count == 1
+    assert sealed.file_count == 2
 
 
-async def test_close_batch_with_no_active_batch_returns_none_and_does_not_notify():
+async def test_enqueue_after_seal_starts_a_brand_new_batch():
     h = make_harness()
+    await h.manager.enqueue(1, "msg-1")
+    first = await h.manager.seal_batch(1)
 
-    result = await h.manager.close_batch(1)
+    second = await h.manager.enqueue(1, "msg-2")
+    await drain()
 
-    assert result is None
+    assert second.batch_id != first.batch_id
+    assert second.queued_count == 1
+    assert h.on_batch_created.await_count == 2
+
+
+async def test_downloads_for_the_same_user_run_strictly_one_at_a_time():
+    h = make_harness()
+    gate = asyncio.Event()
+    started_batch_ids: "list[int]" = []
+
+    async def on_download_file(batch, message):
+        started_batch_ids.append(batch.batch_id)
+        if batch.batch_id == 1:
+            await gate.wait()
+        return make_outcome()
+
+    h.on_download_file.side_effect = on_download_file
+
+    first = await h.manager.enqueue(1, "a")
+    await h.manager.seal_batch(1)
+    await drain()
+
+    second = await h.manager.enqueue(1, "b")
+    await h.manager.seal_batch(1)
+    await drain()
+
+    # batch 2's download must not have started while batch 1 is still in flight
+    assert started_batch_ids == [first.batch_id]
     h.on_batch_closed.assert_not_awaited()
+
+    gate.set()
+    await drain()
+
+    assert started_batch_ids == [first.batch_id, second.batch_id]
+    assert h.on_batch_closed.await_count == 2
 
 
 async def test_two_users_have_independent_batches_and_timers():
     h = make_harness()
 
-    await h.manager.ensure_batch(user_id=1)
-    await h.manager.record_file(user_id=1, outcome=make_outcome())
-    await h.manager.ensure_batch(user_id=2)
-    await h.manager.record_file(user_id=2, outcome=make_outcome())
+    await h.manager.enqueue(1, "msg-1")
+    await h.manager.enqueue(2, "msg-2")
 
-    await h.manager.close_batch(1)
+    await h.manager.seal_batch(1)
+    await drain()
 
     assert h.manager.get_active_batch(1) is None
     assert h.manager.get_active_batch(2) is not None
-
-
-async def test_begin_download_cancels_pending_timer():
-    h = make_harness()
-    await h.manager.ensure_batch(user_id=1)
-    await h.manager.record_file(user_id=1, outcome=make_outcome())
-    armed_count_before = len(h.timer_factory.handles)
-
-    h.manager.begin_download(user_id=1)
-
-    assert h.timer_factory.latest.cancelled is True
-    assert len(h.timer_factory.handles) == armed_count_before
-
-
-async def test_timer_cannot_fire_while_download_in_progress():
-    h = make_harness()
-    await h.manager.ensure_batch(user_id=1)
-
-    h.manager.begin_download(user_id=1)
-
-    assert all(handle.cancelled for handle in h.timer_factory.handles)
-
-
-async def test_end_download_rearms_timer_for_active_batch():
-    h = make_harness()
-    await h.manager.ensure_batch(user_id=1)
-    h.manager.begin_download(user_id=1)
-
-    h.manager.end_download(user_id=1)
-
-    assert h.timer_factory.latest.cancelled is False
-    assert h.timer_factory.latest.delay == 30
-
-
-async def test_end_download_does_not_rearm_timer_after_batch_closed():
-    h = make_harness()
-    await h.manager.ensure_batch(user_id=1)
-    await h.manager.record_file(user_id=1, outcome=make_outcome())
-    await h.manager.close_batch(1)
-    armed_count_before = len(h.timer_factory.handles)
-
-    h.manager.end_download(user_id=1)
-
-    assert len(h.timer_factory.handles) == armed_count_before
-    assert h.timer_factory.latest.cancelled is True
-    assert h.manager.get_active_batch(1) is None
