@@ -94,6 +94,7 @@ class BatchManager:
     async def enqueue(self, user_id: int, message: Any) -> Batch:
         async with self._get_lock(user_id):
             batch = self._active.get(user_id)
+            is_new = batch is None
             if batch is None:
                 now = self._clock()
                 batch = Batch(
@@ -103,10 +104,12 @@ class BatchManager:
                     last_activity_at=now,
                 )
                 self._active[user_id] = batch
-                await self._on_batch_created(batch)
 
             batch.queued_messages.append(message)
             batch.last_activity_at = self._clock()
+
+            if is_new:
+                await self._on_batch_created(batch)
             self._reset_timer(user_id)
             return batch
 
