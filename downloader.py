@@ -4,7 +4,7 @@ import mimetypes
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Protocol
+from typing import Awaitable, Callable, Optional, Protocol
 
 _UNSAFE_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _MEDIA_ATTRS = ("photo", "video", "audio", "document", "voice", "video_note", "animation")
@@ -34,6 +34,10 @@ def build_default_filename(
     media_type: str, message_id: int, date_str: str, mime_type: Optional[str]
 ) -> str:
     extension = mimetypes.guess_extension(mime_type) if mime_type else None
+    if extension is None and media_type == "photo":
+        # Telegram always sends photos as JPEG; Pyrogram's Photo objects
+        # carry no mime_type, so this case can't be inferred otherwise.
+        extension = ".jpg"
     return f"{media_type}_{date_str}_{message_id}{extension or ''}"
 
 
@@ -59,7 +63,12 @@ def extract_media_info(message) -> Optional[MediaInfo]:
 
 
 class MediaDownloader(Protocol):
-    async def download_media(self, message, file_name: str) -> str: ...
+    async def download_media(
+        self,
+        message,
+        file_name: str,
+        progress: Optional[Callable[[int, int], Awaitable[None]]] = None,
+    ) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -83,6 +92,7 @@ async def download_media_message(
     *,
     date_str: str,
     max_retries: int = 2,
+    progress: Optional[Callable[[int, int], Awaitable[None]]] = None,
 ) -> DownloadResult:
     media_info = extract_media_info(message)
     if media_info is None:
@@ -98,7 +108,7 @@ async def download_media_message(
     last_error: Optional[str] = None
     for _ in range(max_retries + 1):
         try:
-            await client.download_media(message, file_name=str(dest_path))
+            await client.download_media(message, file_name=str(dest_path), progress=progress)
         except Exception as exc:  # any download failure is retried, never crashes the batch
             last_error = str(exc)
             continue

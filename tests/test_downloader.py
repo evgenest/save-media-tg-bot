@@ -39,9 +39,11 @@ class StubClient:
     def __init__(self, fail_times: int = 0):
         self.fail_times = fail_times
         self.calls: "list[str]" = []
+        self.progress_calls: "list[object]" = []
 
-    async def download_media(self, message, file_name: str) -> str:
+    async def download_media(self, message, file_name: str, progress=None) -> str:
         self.calls.append(file_name)
+        self.progress_calls.append(progress)
         if self.fail_times > 0:
             self.fail_times -= 1
             raise RuntimeError("network error")
@@ -82,6 +84,11 @@ def test_build_default_filename_with_known_mime_type():
 def test_build_default_filename_without_mime_type():
     name = build_default_filename("document", 42, "20260628-143005", None)
     assert name == "document_20260628-143005_42"
+
+
+def test_build_default_filename_photo_without_mime_type_defaults_to_jpg():
+    name = build_default_filename("photo", 42, "20260628-143005", None)
+    assert name == "photo_20260628-143005_42.jpg"
 
 
 def test_extract_media_info_returns_none_for_text_message():
@@ -154,3 +161,26 @@ async def test_download_media_message_uses_default_filename_when_missing(tmp_pat
     result = await download_media_message(client, message, tmp_path, date_str="20260628-143005")
 
     assert result.stored_name == "photo_20260628-143005_11.jpg"
+
+
+async def test_download_media_message_photo_without_mime_type_gets_jpg_extension(tmp_path):
+    # Pyrogram's Photo objects have no mime_type attribute at all, so this
+    # is the realistic shape for photos forwarded as photos (not as files).
+    message = FakeMessage(id=13, photo=FakeMedia())
+    client = StubClient()
+
+    result = await download_media_message(client, message, tmp_path, date_str="20260628-143005")
+
+    assert result.stored_name == "photo_20260628-143005_13.jpg"
+
+
+async def test_download_media_message_forwards_progress_callback(tmp_path):
+    message = FakeMessage(id=12, document=FakeMedia(file_name="report.pdf"))
+    client = StubClient()
+
+    async def progress(current, total):
+        pass
+
+    await download_media_message(client, message, tmp_path, date_str="d", progress=progress)
+
+    assert client.progress_calls == [progress]

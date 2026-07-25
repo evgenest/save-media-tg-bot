@@ -1,8 +1,31 @@
 import asyncio
+from datetime import datetime
 from pathlib import Path
 
-from bot import BotState, create_app
+import pytest
+
+from batch_manager import Batch, BatchPhase
+from bot import (
+    BotState,
+    LiveProgress,
+    build_bot_commands,
+    build_finish_keyboard,
+    build_help_keyboard,
+    build_help_text,
+    build_pending_text,
+    build_status_text,
+    create_app,
+    make_progress_callback,
+    refresh_status_message,
+)
 from config import Config
+
+
+def make_batch(**overrides):
+    now = datetime(2026, 6, 28, 12, 0, 0)
+    defaults = dict(batch_id=1, user_id=1, started_at=now, last_activity_at=now)
+    defaults.update(overrides)
+    return Batch(**defaults)
 
 
 def make_test_config(tmp_path: Path) -> Config:
@@ -16,6 +39,96 @@ def make_test_config(tmp_path: Path) -> Config:
     )
 
 
+async def test_make_progress_callback_updates_live_state():
+    live = LiveProgress()
+    callback = make_progress_callback(live, "video.mp4")
+
+    await callback(50, 200)
+
+    assert live.current_name == "video.mp4"
+    assert live.current_bytes == 50
+    assert live.current_total == 200
+
+
+async def test_live_progress_current_name_cleared_even_if_download_raises():
+    # Mirrors the try/finally pattern in on_download_file: progress is wired up
+    # before the download attempt, and current_name must be cleared back to
+    # None once that attempt is over, even if it raises instead of returning
+    # a normal DownloadResult.
+    live = LiveProgress()
+    callback = make_progress_callback(live, "video.mp4")
+
+    async def fake_download_media_message() -> None:
+        await callback(10, 100)
+        raise RuntimeError("simulated unexpected failure mid-download")
+
+    with pytest.raises(RuntimeError):
+        try:
+            await fake_download_media_message()
+        finally:
+            live.current_name = None
+
+    assert live.current_name is None
+
+
+def test_build_help_text_includes_batch_timeout():
+    text = build_help_text(45.0)
+    assert "45 секунд" in text
+
+
+def test_build_help_text_mentions_download_now_button_and_help_command():
+    text = build_help_text(30.0)
+    assert "Скачать сейчас" in text
+    assert "/help" in text
+
+
+def test_build_pending_text_shows_queued_count_and_countdown():
+    batch = make_batch(last_activity_at=datetime.now())
+    batch.queued_messages.extend(["a", "b"])
+
+    text = build_pending_text(batch, batch_timeout=30.0)
+
+    assert "В очереди: 2 файлов" in text
+    assert "30 сек" in text
+    assert "Скачать сейчас" in text
+
+
+def test_build_finish_keyboard_label_reflects_download_now_semantics():
+    keyboard = build_finish_keyboard()
+    button = keyboard.inline_keyboard[0][0]
+    assert button.callback_data == "finish_batch"
+    assert "Скачать сейчас" in button.text
+
+
+def test_build_status_text_without_live_progress_is_unchanged():
+    batch = make_batch(file_count=3, total_bytes=1024 * 1024)
+    assert build_status_text(batch) == "Сохранено: 3 файлов, 1.0 МБ"
+
+
+def test_build_status_text_with_live_progress_shows_current_file():
+    batch = make_batch(file_count=3, total_bytes=1024 * 1024)
+    live = LiveProgress(current_name="a.jpg", current_bytes=50, current_total=200)
+
+    text = build_status_text(batch, live)
+
+    assert "Сейчас: a.jpg — 25%" in text
+
+
+def test_build_status_text_omits_current_file_line_when_none():
+    batch = make_batch(file_count=1, total_bytes=0)
+    live = LiveProgress()
+
+    text = build_status_text(batch, live)
+
+    assert "Сейчас:" not in text
+
+
+def test_build_help_keyboard_has_show_help_button():
+    keyboard = build_help_keyboard()
+    button = keyboard.inline_keyboard[0][0]
+    assert button.callback_data == "show_help"
+
+
 def test_create_app_builds_without_network_access(tmp_path):
     config = make_test_config(tmp_path)
 
@@ -27,3 +140,60 @@ def test_create_app_builds_without_network_access(tmp_path):
     # bookkeeping coroutines on the event loop; give them one tick to complete
     # so they don't get garbage-collected later and trigger RuntimeWarning.
     app.loop.run_until_complete(asyncio.sleep(0))
+
+
+class FakeStatusMessage:
+    def __init__(self, fail: bool = False):
+        self.fail = fail
+        self.edits: "list[tuple]" = []
+
+    async def edit_text(self, text, reply_markup=None):
+        self.edits.append((text, reply_markup))
+        if self.fail:
+            raise RuntimeError("flood wait")
+        return self
+
+
+async def test_refresh_status_message_shows_pending_text_with_keyboard():
+    batch = make_batch(phase=BatchPhase.PENDING)
+    batch.queued_messages.append("a")
+    live = LiveProgress()
+    message = FakeStatusMessage()
+
+    result = await refresh_status_message(batch, live, message, batch_timeout=30.0)
+
+    assert result is message
+    text, markup = message.edits[0]
+    assert "В очереди: 1 файлов" in text
+    assert markup is not None
+
+
+async def test_refresh_status_message_shows_downloading_text_without_keyboard():
+    batch = make_batch(phase=BatchPhase.DOWNLOADING, file_count=2, total_bytes=2048)
+    live = LiveProgress(current_name="a.jpg", current_bytes=10, current_total=20)
+    message = FakeStatusMessage()
+
+    result = await refresh_status_message(batch, live, message, batch_timeout=30.0)
+
+    assert result is message
+    text, markup = message.edits[0]
+    assert "a.jpg — 50%" in text
+    assert markup is None
+
+
+async def test_refresh_status_message_swallows_edit_errors():
+    batch = make_batch(phase=BatchPhase.DOWNLOADING, file_count=1, total_bytes=0)
+    live = LiveProgress()
+    message = FakeStatusMessage(fail=True)
+
+    result = await refresh_status_message(batch, live, message, batch_timeout=30.0)
+
+    assert result is message
+
+
+def test_build_bot_commands_includes_start_and_help():
+    commands = build_bot_commands()
+
+    names = [c.command for c in commands]
+
+    assert names == ["start", "help"]
