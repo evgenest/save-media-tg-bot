@@ -21,11 +21,27 @@ pip install -r requirements.txt
 sudo apt install -y build-essential python3-dev
 ```
 
-Заполните `.env` (см. `.env.example`), но `STORAGE_DIR` укажите на реальный
-путь на диске (без Docker он не подставляется томом), например:
+`.env` держите для запуска через Docker (там `STORAGE_DIR=/storage` — путь
+внутри контейнера, подставляется томом). Для запуска без Docker сделайте
+отдельную копию `.env.local`:
+
+```bash
+cp .env .env.local
+```
+
+и укажите в ней `STORAGE_DIR` на реальный путь на диске (без Docker он не
+подставляется томом) — либо абсолютным путём:
 
 ```
 STORAGE_DIR=<путь-к-репозиторию>/storage
+```
+
+либо путём без начального слэша — тогда файлы будут сохраняться в
+`./storage` относительно текущей рабочей директории процесса (для варианта 1
+это будет корень репозитория, для systemd — `WorkingDirectory` из юнита):
+
+```
+STORAGE_DIR=storage
 ```
 
 ## Вариант 1 — разовый запуск
@@ -33,7 +49,7 @@ STORAGE_DIR=<путь-к-репозиторию>/storage
 ```bash
 cd <путь-к-репозиторию>
 source .venv/bin/activate
-set -a; source .env; set +a
+set -a; source .env.local; set +a
 python bot.py
 ```
 
@@ -58,7 +74,7 @@ Wants=network-online.target
 Type=simple
 User=<linux-пользователь>
 WorkingDirectory=<путь-к-репозиторию>
-EnvironmentFile=<путь-к-репозиторию>/.env
+EnvironmentFile=<путь-к-репозиторию>/.env.local
 ExecStart=<путь-к-репозиторию>/.venv/bin/python bot.py
 Restart=on-failure
 RestartSec=5
