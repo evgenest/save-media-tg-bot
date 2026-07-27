@@ -21,6 +21,7 @@ from batch_manager import Batch, BatchManager, BatchPhase
 from config import Config, load_config
 from downloader import DownloadResult, download_media_message, extract_media_info
 from storage import Manifest, ManifestEntry, create_batch_dir
+from text_export import save_text_message
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mediasaver")
@@ -37,6 +38,17 @@ MEDIA_FILTER = (
     | filters.video_note
     | filters.animation
 )
+
+# Plain text messages (no media). Registered after the /start & /help command
+# handler, so commands - also `filters.text` matches - are claimed by that
+# handler first and never reach this one.
+TEXT_FILTER = filters.text
+
+# The bot only saves content that already exists elsewhere in Telegram, not
+# text typed directly into the chat - so both media and text handlers require
+# a forwarded message. /start & /help stay usable when typed directly since
+# their handler doesn't use this filter.
+FORWARDED_FILTER = filters.forwarded
 
 STATUS_REFRESH_INTERVAL = 5.0
 
@@ -129,10 +141,13 @@ def build_summary_text(batch: Batch, batch_dir: Path) -> str:
 def build_help_text(batch_timeout: float) -> str:
     timeout_seconds = int(batch_timeout)
     return (
-        "👋 Привет! Этот бот сохраняет медиафайлы, которые вы ему пересылаете.\n\n"
+        "👋 Привет! Этот бот сохраняет медиафайлы и текстовые сообщения, "
+        "которые вы ему пересылаете.\n\n"
         "Как это работает:\n"
         "1. Пришлите (перешлите) одно или несколько сообщений с фото, видео, "
-        "аудио или документами.\n"
+        "аудио, документами или просто текстом — текст сохранится как "
+        ".md-файл с сохранением форматирования (жирный, курсив, ссылки и "
+        "т.д.).\n"
         "2. Бот покажет, сколько файлов в очереди, и начнёт скачивание через "
         f"{timeout_seconds} секунд после последнего файла — либо сразу, если "
         "нажать «⬇️ Скачать сейчас».\n"
@@ -215,6 +230,9 @@ def create_app(config: Config, state: BotState) -> Client:
         batch_dir = state.batch_dirs[batch.batch_id]
         date_str = message.date.strftime("%Y%m%d-%H%M%S")
 
+        if message.text is not None:
+            return await save_text_message(message, batch_dir, date_str=date_str)
+
         media_info = extract_media_info(message)
         display_name = (media_info.file_name if media_info else None) or "файл"
         live = state.live_progress.setdefault(batch.batch_id, LiveProgress())
@@ -274,13 +292,20 @@ def create_app(config: Config, state: BotState) -> Client:
             build_help_text(config.batch_timeout), reply_markup=build_help_keyboard()
         )
 
-    @app.on_message(MEDIA_FILTER & filters.private)
-    async def handle_media(client: Client, message: Message) -> None:
+    async def handle_enqueue(message: Message) -> None:
         if not is_allowed(message.from_user.id if message.from_user else None, config):
             return
 
         user_id = message.from_user.id
         await batch_manager.enqueue(user_id, message)
+
+    @app.on_message(MEDIA_FILTER & FORWARDED_FILTER & filters.private)
+    async def handle_media(client: Client, message: Message) -> None:
+        await handle_enqueue(message)
+
+    @app.on_message(TEXT_FILTER & FORWARDED_FILTER & filters.private)
+    async def handle_text(client: Client, message: Message) -> None:
+        await handle_enqueue(message)
 
     @app.on_callback_query()
     async def handle_callback_query(client: Client, callback_query: CallbackQuery) -> None:
