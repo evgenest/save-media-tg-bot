@@ -1,0 +1,172 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=18mm]{geometry}
+\usepackage{fontspec}
+\usepackage{polyglossia}
+\setdefaultlanguage{russian}
+\setotherlanguage{ukrainian}
+\setmainfont{Liberation Serif}
+\setsansfont{Liberation Sans}
+\newfontfamily\cyrillicfont{Liberation Serif}
+\newfontfamily\cyrillicfontsf{Liberation Sans}
+
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{booktabs}
+\usepackage{xltabular}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{amssymb}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{accent}{HTML}{8A6A3B}
+\definecolor{rowbg}{HTML}{F4EEE4}
+\definecolor{bad}{HTML}{A33A2B}
+\definecolor{good}{HTML}{2E6B3A}
+
+\titleformat{\section}{\sffamily\Large\bfseries\color{accent}}{\thesection.}{0.5em}{}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+\renewcommand{\arraystretch}{1.3}
+
+\newcommand{\was}[1]{\textcolor{bad}{#1}}
+\newcommand{\now}[1]{\textcolor{good}{\textbf{#1}}}
+\newcommand{\thead}[1]{\sffamily\bfseries\small #1}
+\newcolumntype{F}{>{\raggedright\arraybackslash}p{24mm}}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+
+\begin{document}
+
+{\sffamily
+{\Huge\bfseries\color{accent} Вычитка бланков оценивания}\par\vspace{2pt}
+{\Large LEVEL UP Championship 2026}\par\vspace{6pt}
+\small Дата проверки: 25.09.2026 \quad·\quad Проверено файлов: 18 \quad·\quad Язык бланков: украинский\par}
+\vspace{6pt}
+{\color{accent}\rule{\linewidth}{0.6pt}}
+
+\textbf{Как читать отчёт.} \was{Красным} отмечено, как написано сейчас, \now{зелёным}~— как нужно исправить.
+Номер файла соответствует имени картинки (например, 2460~— это IMG\_2460.PNG), «п.~3»~— номер критерия в таблице.
+
+\section{Список бланков}
+
+\begin{xltabular}{\linewidth}{>{\sffamily}l Y}
+\toprule
+\rowcolor{rowbg}\thead{Файл} & \thead{Номинация} \\
+\midrule
+2458 & AirTouch (вариант с 13 критериями) \\
+2459 & AirTouch (визуально совпадает с 2458) \\
+2460 & AirTouch (вариант с 16 критериями) \\
+2461 & Relief \\
+2486 & Total Blonde \\
+2487 & Keratin Perfection \\
+2494 & Permanent Hair Straightening \\
+2495 & Cold Reconstruction \\
+2496 & Авторський SPA \\
+2497 & Classic Extensions \\
+2498 & Advanced Hair Extensions \\
+2547 & Creative Hair Extensions \\
+2548 & Volume Waves \\
+2549 & Elegant Bun \\
+2550 & Bridal Hair Style \\
+2551 & Classic Eyeliner \\
+2552 & Bridal Makeup \\
+2553 & Eyebrow Styling \\
+\bottomrule
+\end{xltabular}
+
+\section{Явные ошибки~— исправить обязательно}
+
+\begin{xltabular}{\linewidth}{F Y Y}
+\toprule
+\rowcolor{rowbg}\thead{Где} & \thead{Было} & \thead{Надо} \\
+\midrule
+\endhead
+2460, п.~8 & \was{натуродність} & \now{натуральність} \newline\footnotesize опечатка \\
+2487, п.~3 & \was{пропитка кожної пасма} & \now{просочення кожного пасма} \newline\footnotesize русизм; «пасмо» среднего рода \\
+2497, п.~5 & \was{відсутність підтикань} & \now{відсутність підтікань} \newline\footnotesize опечатка (в п.~3 и в 2498 верно) \\
+2552, п.~7 & \was{виразність і женственність} & \now{виразність і жіночність} \newline\footnotesize русизм \\
+2547, заголовок & \was{CREATIVE}~— над буквой «A» лишний знак & \now{CREATIVE} \newline\footnotesize графический артефакт, убрать \\
+2494, п.~3 & \was{згідно протоколу} & \now{згідно з протоколом} \\
+2495, п.~3 & \was{згідно протоколу} & \now{згідно з протоколом} \\
+2461, п.~1 & \was{баланс світлих-темних зон} & \now{баланс світлих і темних зон} \\
+2551, п.~1 \newline 2553, п.~1 \newline 2552, п.~4 & \was{відповідність форми очей та типу обличчя} & \now{відповідність формі очей і типу обличчя} \newline\footnotesize «відповідність чому?» \\
+2548, п.~8 & \was{відповідність форми обличчя} & \now{відповідність формі обличчя} \newline\footnotesize в 2550, п.~6 написано верно \\
+2550, п.~3 & \was{відповідність до типу та образу нареченої} & \now{відповідність типу та образу нареченої} \newline\footnotesize без «до» \\
+2552, п.~2 & \was{гармонія з зачіскою} & \now{гармонія із зачіскою} \\
+2495, п.~1 & \was{з еластичними або хімічними пошкодженнями} & \now{з механічними / термічними або хімічними пошкодженнями} \newline\footnotesize «еластичні пошкодження» не имеет смысла~— уточнить у автора \\
+2486, п.~5 & \was{відсутність сиво-жовтизни} & \now{відсутність жовтизни} или \now{відсутність жовтого відтінку} \\
+\bottomrule
+\end{xltabular}
+
+\section{Стилистика и русизмы~— желательно исправить}
+
+\begin{xltabular}{\linewidth}{F Y Y}
+\toprule
+\rowcolor{rowbg}\thead{Где} & \thead{Было} & \thead{Лучше} \\
+\midrule
+\endhead
+2494, п.~6 \newline 2495, п.~7 \newline 2496, п.~8 & \was{утюжок} & \now{праска} / \now{випрямляч} \\
+2551, п.~5 \newline 2552, п.~5 & \was{Поклейка вій}; \was{чистота поклейки} & \now{Наклеювання вій}; \now{чистота наклеювання} \\
+2487, п.~6 & \was{Фінальна мийка та сушка} & \now{Фінальне миття та сушіння} \newline\footnotesize в остальных бланках «миття» \\
+2487, п.~6 & \was{якість сушіння та витяжки} & \now{якість сушіння та витягування} \\
+2487, п.~3 & \was{правильне ділення на зони} & \now{правильний поділ на зони} \\
+2495, п.~2 & \was{правильне розділення на зони} & \now{правильний поділ на зони} \\
+2461, п.~7 \newline 2486, п.~8 & \was{повнота виконання роботи в час} & \now{повне виконання роботи у відведений час} \\
+2487, п.~5 & \was{ефективна організація роботи в час} & \now{ефективна організація роботи у відведений час} \\
+2494, п.~6 & \was{збереження безпеки волосся} & \now{збереження здоров'я волосся} \\
+2547, п.~10 & \was{комерційність та носибельність} & \now{комерційність та практичність у повсякденному носінні} \newline\footnotesize «носибельність»~— сленг \\
+2552, п.~1 & \was{відповідність концепції bridal образу} & \now{відповідність концепції весільного образу} \\
+2551, п.~9 & \was{гармонія образу (hair, styling, photo look)} & \now{гармонія образу (зачіска, стайлінг, фотообраз)} \\
+2547, п.~1 & \was{«відповідно до задуму»} отдельным пунктом & объединить с предыдущим: \now{правильний підбір техніки кріплення відповідно до задуму} \\
+2547, п.~1 & \was{можливість виконання на попередній моделі} & формулировка неясна~— уточнить смысл \\
+все бланки & «сушка» и «сушіння» вперемешку & выбрать одно, нормативно~— \now{сушіння} \\
+\bottomrule
+\end{xltabular}
+
+\section{Мелкие несоответствия}
+
+\begin{itemize}[leftmargin=*,itemsep=3pt]
+  \item \textbf{Кавычки.} В 2553, п.~5~— \was{“перемальованості”}, в 2458 и 2460~— «дір». Везде использовать \now{«ёлочки»}.
+  \item \textbf{Заглавная буква не к месту.}
+    2487, п.~9: \was{Загальний вигляд / Повноцінний образ} $\to$ \now{Загальний вигляд / повноцінний образ}.
+    2553, п.~7: \was{(Ламінування та архітектура)} $\to$ \now{(ламінування та архітектура)}.
+  \item \textbf{Фиксация.} 2549, п.~4~— \was{Фіксація стайлінгу}, а в 2548 и 2550~— «Фіксація стайлінгом». Везде \now{стайлінгом}.
+  \item \textbf{Тире в заголовках.} В 2547, 2551, 2552, 2553 короткое «–», в остальных длинное «—». Везде \now{длинное «—»}.
+  \item \textbf{Пробелы вокруг слэша.} 2458, п.~6: \was{прозорість/}~— в остальных местах слэш с пробелами: \now{« / »}.
+\end{itemize}
+
+\section{Не орфография, но стоит проверить}
+
+\begin{itemize}[leftmargin=*,itemsep=3pt]
+  \item \textbf{2458 и 2459 выглядят одинаково}~— похоже на дубль.
+  \item \textbf{Два разных бланка AirTouch}: 2458 (13 критериев) и 2460 (16 критериев, другие баллы). Какой из них актуальный?
+  \item \textbf{Разные максимумы за «Додаткові бали / елементи»}: 0–5 в 2460 и 2553, 0–2 в 2496, 2497, 2498.
+  \item \textbf{Разные максимумы за финальный образ}: в большинстве бланков 0–3, в 2549, 2550, 2551, 2553~— 0–5.
+\end{itemize}
+Если так задумано~— всё в порядке.
+
+\section{Чек-лист по бланкам}
+
+\begin{itemize}[label=$\square$,leftmargin=*,itemsep=2pt]
+  \item \textbf{2458}~— пробелы вокруг слэша (п.~6)
+  \item \textbf{2459}~— дубль 2458?
+  \item \textbf{2460}~— натуродність $\to$ натуральність
+  \item \textbf{2461}~— світлих-темних; «в час»
+  \item \textbf{2486}~— сиво-жовтизни; «в час»
+  \item \textbf{2487}~— пропитка кожної пасма; мийка; витяжки; ділення; «в час»; заглавная «П»
+  \item \textbf{2494}~— згідно протоколу; утюжок; безпеки волосся
+  \item \textbf{2495}~— еластичними пошкодженнями; згідно протоколу; розділення; утюжок
+  \item \textbf{2496}~— утюжок
+  \item \textbf{2497}~— підтикань $\to$ підтікань
+  \item \textbf{2498}~— ошибок не найдено
+  \item \textbf{2547}~— артефакт в заголовке; носибельність; формулировки п.~1; тире
+  \item \textbf{2548}~— відповідність формі обличчя
+  \item \textbf{2549}~— Фіксація стайлінгом
+  \item \textbf{2550}~— відповідність до типу
+  \item \textbf{2551}~— відповідність формі очей; поклейка; английский в скобках; тире
+  \item \textbf{2552}~— женственність; із зачіскою; bridal образу; поклейка; відповідність формі очей; тире
+  \item \textbf{2553}~— відповідність формі очей; кавычки; заглавная «Л»; тире
+\end{itemize}
+
+\end{document}
