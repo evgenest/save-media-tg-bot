@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, Optional
 
 _REQUIRED_VARS = ("API_ID", "API_HASH", "BOT_TOKEN", "ALLOWED_USER_IDS", "STORAGE_DIR")
 _DEFAULT_BATCH_TIMEOUT = "30"
@@ -20,6 +20,8 @@ class Config:
     allowed_user_ids: "frozenset[int]"
     storage_dir: Path
     batch_timeout: float
+    # Receives messages the bot couldn't process (only if the sender agrees).
+    developer_user_id: Optional[int] = None
 
 
 def load_config(env: Mapping[str, str]) -> Config:
@@ -54,6 +56,18 @@ def load_config(env: Mapping[str, str]) -> Config:
     if batch_timeout <= 0:
         raise ConfigError("BATCH_TIMEOUT must be greater than zero")
 
+    developer_user_id: Optional[int]
+    if env.get("DEVELOPER_USER_ID"):
+        try:
+            developer_user_id = int(env["DEVELOPER_USER_ID"])
+        except ValueError as exc:
+            raise ConfigError("DEVELOPER_USER_ID must be an integer") from exc
+    elif len(allowed_user_ids) == 1:
+        # Single-owner setup: the only allowed user is the developer too.
+        (developer_user_id,) = allowed_user_ids
+    else:
+        developer_user_id = None
+
     return Config(
         api_id=api_id,
         api_hash=env["API_HASH"],
@@ -61,4 +75,5 @@ def load_config(env: Mapping[str, str]) -> Config:
         allowed_user_ids=allowed_user_ids,
         storage_dir=Path(env["STORAGE_DIR"]),
         batch_timeout=batch_timeout,
+        developer_user_id=developer_user_id,
     )

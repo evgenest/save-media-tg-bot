@@ -22,6 +22,13 @@ from config import Config, load_config
 from downloader import DownloadResult, download_media_message, extract_media_info
 from storage import Manifest, ManifestEntry, create_batch_dir
 from text_export import is_text_message, save_text_message
+from unsupported import (
+    REPORT_NO_DATA,
+    REPORT_YES_DATA,
+    explain_not_forwarded,
+    handle_report_choice,
+    offer_report,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mediasaver")
@@ -54,7 +61,8 @@ RICH_FILTER = filters.create(
 # The bot only saves content that already exists elsewhere in Telegram, not
 # text typed directly into the chat - so both media and text handlers require
 # a forwarded message. /start & /help stay usable when typed directly since
-# their handler doesn't use this filter.
+# their handler doesn't use this filter; anything else sent directly gets a
+# hint (see handle_not_forwarded).
 FORWARDED_FILTER = filters.forwarded
 
 STATUS_REFRESH_INTERVAL = 5.0
@@ -314,14 +322,41 @@ def create_app(config: Config, state: BotState) -> Client:
     async def handle_text(client: Client, message: Message) -> None:
         await handle_enqueue(message)
 
+    # Must stay registered last: handlers in one group are tried in order and
+    # only the first match runs, so this sees exactly the forwarded messages
+    # no content handler above could claim (stickers, polls, new formats...).
+    @app.on_message(FORWARDED_FILTER & filters.private)
+    async def handle_unsupported(client: Client, message: Message) -> None:
+        if not is_allowed(message.from_user.id if message.from_user else None, config):
+            return
+        await offer_report(message, config.developer_user_id)
+
+    # Everything else in private chat (typed text, stickers from the panel,
+    # unknown commands...) was sent directly, not forwarded - answer with a
+    # hint instead of silently ignoring it.
+    @app.on_message(filters.private & ~filters.service)
+    async def handle_not_forwarded(client: Client, message: Message) -> None:
+        if not is_allowed(message.from_user.id if message.from_user else None, config):
+            return
+        await explain_not_forwarded(message)
+
     @app.on_callback_query()
     async def handle_callback_query(client: Client, callback_query: CallbackQuery) -> None:
-        if callback_query.data not in (FINISH_BATCH_DATA, SHOW_HELP_DATA):
+        if callback_query.data not in (
+            FINISH_BATCH_DATA,
+            SHOW_HELP_DATA,
+            REPORT_YES_DATA,
+            REPORT_NO_DATA,
+        ):
             return
 
         user_id = callback_query.from_user.id
         if not is_allowed(user_id, config):
             await callback_query.answer()
+            return
+
+        if callback_query.data in (REPORT_YES_DATA, REPORT_NO_DATA):
+            await handle_report_choice(client, callback_query, config.developer_user_id)
             return
 
         if callback_query.data == SHOW_HELP_DATA:

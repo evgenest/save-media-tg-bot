@@ -23,6 +23,7 @@ def test_load_config_success():
         allowed_user_ids=frozenset({111, 222}),
         storage_dir=Path("/data/storage"),
         batch_timeout=30.0,
+        developer_user_id=None,
     )
 
 
@@ -79,4 +80,23 @@ def test_load_config_non_positive_batch_timeout_raises():
     env = dict(VALID_ENV, BATCH_TIMEOUT="0")
 
     with pytest.raises(ConfigError, match="BATCH_TIMEOUT"):
+        load_config(env)
+
+
+def test_load_config_developer_defaults_to_single_allowed_user():
+    env = dict(VALID_ENV, ALLOWED_USER_IDS="111")
+
+    assert load_config(env).developer_user_id == 111
+
+
+def test_load_config_developer_explicit():
+    env = dict(VALID_ENV, DEVELOPER_USER_ID="333")
+
+    assert load_config(env).developer_user_id == 333
+
+
+def test_load_config_invalid_developer_raises():
+    env = dict(VALID_ENV, DEVELOPER_USER_ID="abc")
+
+    with pytest.raises(ConfigError, match="DEVELOPER_USER_ID"):
         load_config(env)
