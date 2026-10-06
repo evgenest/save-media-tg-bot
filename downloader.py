@@ -4,7 +4,7 @@ import mimetypes
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Awaitable, Callable, Optional, Protocol
+from typing import Awaitable, Callable, Optional, Protocol, Tuple
 
 _UNSAFE_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _MEDIA_ATTRS = ("photo", "video", "audio", "document", "voice", "video_note", "animation")
@@ -83,6 +83,8 @@ class DownloadResult:
     message_date: str
     caption: Optional[str]
     error: Optional[str] = None
+    # Extra files stored alongside (media embedded in a rich text message).
+    attachments: Tuple[str, ...] = ()
 
 
 async def download_media_message(

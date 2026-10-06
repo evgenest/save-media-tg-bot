@@ -9,6 +9,6 @@ RUN apt-get update \
     && apt-get purge -y --auto-remove gcc libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY config.py storage.py downloader.py batch_manager.py text_export.py rich_markdown.py unsupported.py bot.py ./
+COPY config.py storage.py downloader.py batch_manager.py text_export.py rich_markdown.py rich_media.py unsupported.py bot.py ./
 
 CMD ["python", "bot.py"]

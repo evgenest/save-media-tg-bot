@@ -50,6 +50,7 @@ def test_manifest_add_entry_writes_json_file(tmp_path):
             "message_date": "20260628-143005",
             "caption": "hello",
             "error": None,
+            "attachments": [],
         }
     ]
 

@@ -4,7 +4,7 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -17,6 +17,7 @@ class ManifestEntry:
     message_date: str
     caption: Optional[str]
     error: Optional[str] = None
+    attachments: Tuple[str, ...] = ()
 
 
 def create_batch_dir(storage_dir: Path, started_at: datetime) -> Path:

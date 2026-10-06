@@ -247,12 +247,22 @@ def create_app(config: Config, state: BotState) -> Client:
         batch_dir = state.batch_dirs[batch.batch_id]
         date_str = message.date.strftime("%Y%m%d-%H%M%S")
 
+        live = state.live_progress.setdefault(batch.batch_id, LiveProgress())
+
         if is_text_message(message):
-            return await save_text_message(message, batch_dir, date_str=date_str)
+            try:
+                return await save_text_message(
+                    message,
+                    batch_dir,
+                    date_str=date_str,
+                    client=app,
+                    progress_for=lambda name: make_progress_callback(live, name),
+                )
+            finally:
+                live.current_name = None
 
         media_info = extract_media_info(message)
         display_name = (media_info.file_name if media_info else None) or "файл"
-        live = state.live_progress.setdefault(batch.batch_id, LiveProgress())
         progress = make_progress_callback(live, display_name)
 
         try:
@@ -275,6 +285,7 @@ def create_app(config: Config, state: BotState) -> Client:
                 message_date=outcome.message_date,
                 caption=outcome.caption,
                 error=outcome.error,
+                attachments=outcome.attachments,
             )
         )
 
