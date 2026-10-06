@@ -21,7 +21,7 @@ from batch_manager import Batch, BatchManager, BatchPhase
 from config import Config, load_config
 from downloader import DownloadResult, download_media_message, extract_media_info
 from storage import Manifest, ManifestEntry, create_batch_dir
-from text_export import save_text_message
+from text_export import is_text_message, save_text_message
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mediasaver")
@@ -43,6 +43,13 @@ MEDIA_FILTER = (
 # handler, so commands - also `filters.text` matches - are claimed by that
 # handler first and never reach this one.
 TEXT_FILTER = filters.text
+
+# Rich messages (structured blocks: lists, headings, tables...) have an empty
+# `text` and no media, so neither filter above matches them.
+RICH_FILTER = filters.create(
+    lambda _, __, message: getattr(message, "rich_message", None) is not None,
+    "RichMessageFilter",
+)
 
 # The bot only saves content that already exists elsewhere in Telegram, not
 # text typed directly into the chat - so both media and text handlers require
@@ -230,7 +237,7 @@ def create_app(config: Config, state: BotState) -> Client:
         batch_dir = state.batch_dirs[batch.batch_id]
         date_str = message.date.strftime("%Y%m%d-%H%M%S")
 
-        if message.text is not None:
+        if is_text_message(message):
             return await save_text_message(message, batch_dir, date_str=date_str)
 
         media_info = extract_media_info(message)
@@ -303,7 +310,7 @@ def create_app(config: Config, state: BotState) -> Client:
     async def handle_media(client: Client, message: Message) -> None:
         await handle_enqueue(message)
 
-    @app.on_message(TEXT_FILTER & FORWARDED_FILTER & filters.private)
+    @app.on_message((TEXT_FILTER | RICH_FILTER) & FORWARDED_FILTER & filters.private)
     async def handle_text(client: Client, message: Message) -> None:
         await handle_enqueue(message)
 
