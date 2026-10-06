@@ -10,6 +10,7 @@ VALID_ENV = {
     "BOT_TOKEN": "111:AAAA",
     "ALLOWED_USER_IDS": "111, 222",
     "STORAGE_DIR": "/data/storage",
+    "OWNER_USER_ID": "111",
 }
 
 
@@ -23,12 +24,13 @@ def test_load_config_success():
         allowed_user_ids=frozenset({111, 222}),
         storage_dir=Path("/data/storage"),
         batch_timeout=30.0,
-        developer_user_id=None,
+        owner_user_id=111,
     )
 
 
 @pytest.mark.parametrize(
-    "missing_key", ["API_ID", "API_HASH", "BOT_TOKEN", "ALLOWED_USER_IDS", "STORAGE_DIR"]
+    "missing_key",
+    ["API_ID", "API_HASH", "BOT_TOKEN", "ALLOWED_USER_IDS", "STORAGE_DIR", "OWNER_USER_ID"],
 )
 def test_load_config_missing_required_var_raises(missing_key):
     env = dict(VALID_ENV)
@@ -83,20 +85,14 @@ def test_load_config_non_positive_batch_timeout_raises():
         load_config(env)
 
 
-def test_load_config_developer_defaults_to_single_allowed_user():
-    env = dict(VALID_ENV, ALLOWED_USER_IDS="111")
+def test_load_config_owner_is_not_derived_from_allowed_users():
+    env = dict(VALID_ENV, ALLOWED_USER_IDS="222", OWNER_USER_ID="333")
 
-    assert load_config(env).developer_user_id == 111
-
-
-def test_load_config_developer_explicit():
-    env = dict(VALID_ENV, DEVELOPER_USER_ID="333")
-
-    assert load_config(env).developer_user_id == 333
+    assert load_config(env).owner_user_id == 333
 
 
-def test_load_config_invalid_developer_raises():
-    env = dict(VALID_ENV, DEVELOPER_USER_ID="abc")
+def test_load_config_invalid_owner_raises():
+    env = dict(VALID_ENV, OWNER_USER_ID="abc")
 
-    with pytest.raises(ConfigError, match="DEVELOPER_USER_ID"):
+    with pytest.raises(ConfigError, match="OWNER_USER_ID"):
         load_config(env)

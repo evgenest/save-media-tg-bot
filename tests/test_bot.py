@@ -36,6 +36,7 @@ def make_test_config(tmp_path: Path) -> Config:
         allowed_user_ids=frozenset({111}),
         storage_dir=tmp_path,
         batch_timeout=30.0,
+        owner_user_id=111,
     )
 
 

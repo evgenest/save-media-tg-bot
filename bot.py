@@ -23,9 +23,11 @@ from downloader import DownloadResult, download_media_message, extract_media_inf
 from storage import Manifest, ManifestEntry, create_batch_dir
 from text_export import is_text_message, save_text_message
 from unsupported import (
+    FIXED_DATA_PREFIX,
     REPORT_NO_DATA,
     REPORT_YES_DATA,
     explain_not_forwarded,
+    handle_fixed,
     handle_report_choice,
     offer_report,
 )
@@ -329,7 +331,7 @@ def create_app(config: Config, state: BotState) -> Client:
     async def handle_unsupported(client: Client, message: Message) -> None:
         if not is_allowed(message.from_user.id if message.from_user else None, config):
             return
-        await offer_report(message, config.developer_user_id)
+        await offer_report(message)
 
     # Everything else in private chat (typed text, stickers from the panel,
     # unknown commands...) was sent directly, not forwarded - answer with a
@@ -342,6 +344,12 @@ def create_app(config: Config, state: BotState) -> Client:
 
     @app.on_callback_query()
     async def handle_callback_query(client: Client, callback_query: CallbackQuery) -> None:
+        # Owner-only button under unsupported-message reports; the owner isn't
+        # necessarily in ALLOWED_USER_IDS, so it's checked separately.
+        if (callback_query.data or "").startswith(FIXED_DATA_PREFIX):
+            await handle_fixed(client, callback_query, config.owner_user_id)
+            return
+
         if callback_query.data not in (
             FINISH_BATCH_DATA,
             SHOW_HELP_DATA,
@@ -356,7 +364,7 @@ def create_app(config: Config, state: BotState) -> Client:
             return
 
         if callback_query.data in (REPORT_YES_DATA, REPORT_NO_DATA):
-            await handle_report_choice(client, callback_query, config.developer_user_id)
+            await handle_report_choice(client, callback_query, config.owner_user_id)
             return
 
         if callback_query.data == SHOW_HELP_DATA:
