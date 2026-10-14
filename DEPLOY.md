@@ -16,14 +16,18 @@ uv sync --frozen --no-dev
 ```
 
 `--frozen` ставит ровно то, что записано в `uv.lock`, и не пересчитывает его.
-Без uv: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`
+Версия Python берётся из `.python-version` (3.14, как в Dockerfile): uv сам
+скачает интерпретатор в `~/.local/share/uv/python`, системный Python не нужен.
+Этот интерпретатор нельзя удалять, пока на нём стоит `.venv`.
+Без uv (нужен системный Python 3.14 или совместимый): `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`
 (`requirements.txt` генерируется из `uv.lock`, им же пользуется Dockerfile).
 
 `TgCrypto` собирается из исходников — если сборка падает, поставьте
-инструменты сборки и заголовки Python:
+компилятор (`build-essential`). С интерпретатором от uv заголовки Python уже
+в комплекте; `python3-dev` нужен только при системном Python без uv:
 
 ```bash
-sudo apt install -y build-essential python3-dev
+sudo apt install -y build-essential
 ```
 
 `.env` держите для запуска через Docker (там `STORAGE_DIR=/storage` — путь
