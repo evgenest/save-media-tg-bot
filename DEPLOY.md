@@ -7,12 +7,17 @@
 
 ## Общая подготовка
 
+Нужен [uv](https://docs.astral.sh/uv/). Версии зависимостей зафиксированы в
+`uv.lock`, окружение создаётся в `.venv`:
+
 ```bash
 cd <путь-к-репозиторию>
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+uv sync --frozen --no-dev
 ```
+
+`--frozen` ставит ровно то, что записано в `uv.lock`, и не пересчитывает его.
+Без uv: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`
+(`requirements.txt` генерируется из `uv.lock`, им же пользуется Dockerfile).
 
 `TgCrypto` собирается из исходников — если сборка падает, поставьте
 инструменты сборки и заголовки Python:
@@ -48,9 +53,7 @@ STORAGE_DIR=storage
 
 ```bash
 cd <путь-к-репозиторию>
-source .venv/bin/activate
-set -a; source .env.local; set +a
-python bot.py
+uv run --frozen --no-dev --env-file .env.local bot.py
 ```
 
 Останавливается `Ctrl+C`. Ничего не остаётся в фоне после закрытия терминала
@@ -66,14 +69,7 @@ tmux attach -t <имя>        # зайти обратно и нажать Ctrl+
 tmux kill-session -t <имя>
 ```
 
-После остановки бота `.venv` можно деактивировать в том же shell:
-
-```bash
-deactivate
-```
-Это встроенная функция, которую создаёт `activate`. Если вместо этого закрыть
-сам `tmux`-pane/сессию — shell завершится вместе со всем своим состоянием,
-отдельно деактивировать venv не нужно.
+Активировать venv не нужно: `uv run` сам берёт `.venv` из корня репозитория.
 
 ## Вариант 2 — systemd-сервис
 
@@ -101,6 +97,10 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 ```
+
+Юнит запускает Python из `.venv` напрямую, без `uv run`: при рестарте не нужны
+сеть и кэш uv, версии не меняются. Обновлять окружение — `uv sync --frozen
+--no-dev` при деплое, затем `systemctl restart`.
 
 Применить и запустить:
 

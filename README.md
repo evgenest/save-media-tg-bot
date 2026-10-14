@@ -94,8 +94,17 @@ Rich-сообщения (структурированный текст Telegram:
 ## Разработка и тесты
 
 ```bash
-pip install -r requirements-dev.txt
-pytest -v
+uv sync            # runtime + dev-зависимости из uv.lock в .venv
+uv run pytest -v
+```
+
+Зависимости объявлены в `pyproject.toml`, точные версии — в `uv.lock`.
+`requirements.txt` генерируется (его читает Dockerfile), руками не править:
+
+```bash
+uv lock                                    # после правки зависимостей
+uv lock --upgrade-package <пакет>          # обновить один пакет
+uv export --no-dev --no-hashes --no-emit-project -o requirements.txt
 ```
 
 Модули `config.py`, `storage.py`, `downloader.py`, `text_export.py`,
