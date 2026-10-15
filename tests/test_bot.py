@@ -213,7 +213,9 @@ def test_create_app_with_group_archive_uses_persistent_session(tmp_path):
         transcribe_max_seconds=1800,
     )
 
-    app = create_app(make_test_config(tmp_path), BotState(), archive_config)
+    from mediasaver.archive.live import LiveArchives
+
+    app = create_app(make_test_config(tmp_path), BotState(), LiveArchives(archive_config, environ={}))
 
     assert not app.in_memory
     assert app.skip_updates is False

@@ -7,7 +7,6 @@ from typing import Callable, Dict, List, Optional
 from pyrogram.errors import FloodWait
 
 from mediasaver.archive.group import Archives, ChatArchive, archive_for
-from mediasaver.archive.speech import needs_transcript
 
 # History backfill: bots can't page through chat history (no getHistory), but
 # they can fetch messages by id, and supergroup ids are sequential. On start
@@ -87,9 +86,7 @@ async def backfill_chat(
         await sleep(pause)
 
     for archive in chat_archives:
-        for record in archive.store.load():
-            if needs_transcript(record, archive.config.transcribe_max_seconds):
-                await archive.transcribe(record)
+        await archive.transcribe_pending()
     logger.info("Backfill of chat %s done, added %s", chat_id, added)
     return added
 

@@ -17,12 +17,13 @@ from pyrogram.types import (
     Message,
 )
 
-from mediasaver.archive.config import ArchiveConfig, load_archive_config
+from mediasaver.archive.config import load_archive_config
 from mediasaver.core.batch_manager import Batch, BatchManager, BatchPhase
 from mediasaver.core.config import Config, load_config
 from mediasaver.core.downloader import DownloadResult, download_media_message, extract_media_info
 from mediasaver.archive.backfill import start_backfill
 from mediasaver.archive.group import Archives, register_archive_handlers
+from mediasaver.archive.live import LiveArchives
 from mediasaver.core.storage import Manifest, ManifestEntry, create_batch_dir
 from mediasaver.media.text_export import is_text_message, save_text_message
 from mediasaver.media.unsupported import (
@@ -216,15 +217,15 @@ async def refresh_status_message(
 
 
 def create_app(
-    config: Config, state: BotState, archive_config: Optional[ArchiveConfig] = None
+    config: Config, state: BotState, live: Optional[LiveArchives] = None
 ) -> Client:
-    if archive_config is None:
+    if live is None:
         session = {"in_memory": True}
     else:
         # The group archive must not lose messages sent while the bot was
         # down: a persistent session lets it catch up on start.
-        archive_config.session_dir.mkdir(parents=True, exist_ok=True)
-        session = {"workdir": str(archive_config.session_dir), "skip_updates": False}
+        live.session_dir.mkdir(parents=True, exist_ok=True)
+        session = {"workdir": str(live.session_dir), "skip_updates": False}
     app = Client(
         "mediasaver_bot",
         api_id=config.api_id,
@@ -405,40 +406,62 @@ def create_app(
         else:
             await callback_query.answer()
 
-    if archive_config is not None:
-        state.archives = register_archive_handlers(app, archive_config)
+    if live is not None:
+        state.archives = live.archives
+        register_archive_handlers(app, live.archives, refresh=live.refresh)
 
     return app
 
 
-async def run_bot(
-    config: Config, state: BotState, archive_config: Optional[ArchiveConfig] = None
-) -> None:
-    app = create_app(config, state, archive_config)
+def describe_archive(live: Optional[LiveArchives]) -> str:
+    if live is None:
+        return "off"
+    chats = ", ".join(
+        f"{chat_id}" + (f"/{topic_id}" if topic_id else "") for chat_id, topic_id in live.archives
+    )
+    reload = f"reload from {live.env_file}" if live.env_file else "no reload"
+    return f"{chats or 'no chats'} ({reload})"
+
+
+async def run_bot(config: Config, state: BotState, live: Optional[LiveArchives] = None) -> None:
+    app = create_app(config, state, live)
     await app.start()
+    tasks = []
     try:
         await app.set_bot_commands(build_bot_commands())
-        logger.info(
-            "Starting mediasaver bot; group archive: %s",
-            ", ".join(
-                f"{chat_id}" + (f"/{topic_id}" if topic_id else "")
-                for chat_id, topic_id in archive_config.chats
-            )
-            if archive_config
-            else "off",
-        )
-        backfill = start_backfill(app, state.archives)
+        logger.info("Starting mediasaver bot; group archive: %s", describe_archive(live))
+        if live is not None:
+            tasks = [
+                task
+                for task in (start_backfill(app, live.archives), asyncio.create_task(live.watch(app)))
+                if task is not None
+            ]
         await idle()
-        if backfill is not None:
-            backfill.cancel()
     finally:
+        for task in tasks:
+            task.cancel()
         await app.stop()
+
+
+def build_live_archives(env) -> Optional[LiveArchives]:
+    """Archive mode is on when ARCHIVE_CHATS is set, or when CONFIG_FILE
+    points at the env file - then chats can be added later without a restart."""
+    archive_config = load_archive_config(env)
+    env_file = Path(env["CONFIG_FILE"]).expanduser() if env.get("CONFIG_FILE") else None
+    if archive_config is None and env_file is None:
+        return None
+    return LiveArchives(
+        archive_config,
+        env_file=env_file,
+        environ=env,
+        session_dir=Path(env.get("ARCHIVE_SESSION_DIR") or "sessions").expanduser(),
+    )
 
 
 def main() -> None:
     config = load_config(os.environ)
     config.storage_dir.mkdir(parents=True, exist_ok=True)
-    asyncio.run(run_bot(config, BotState(), load_archive_config(os.environ)))
+    asyncio.run(run_bot(config, BotState(), build_live_archives(os.environ)))
 
 
 if __name__ == "__main__":

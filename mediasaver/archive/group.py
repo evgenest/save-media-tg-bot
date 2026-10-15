@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import mimetypes
-from typing import Dict, Optional
+from typing import Awaitable, Callable, Dict, Optional
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
@@ -54,6 +54,8 @@ class ChatArchive:
         self.store = store
         self.config = config
         self.lock = asyncio.Lock()
+        # One sweep of pending transcriptions at a time (backfill, reload).
+        self.transcribe_lock = asyncio.Lock()
         # Ids already recorded - the history backfill skips them.
         self.known: "set[int]" = store.known_ids()
 
@@ -135,6 +137,13 @@ class ChatArchive:
         async with self.lock:
             await self.render()
 
+    async def transcribe_pending(self) -> None:
+        """Transcribe every record still waiting for it (e.g. received before
+        the ElevenLabs key was set)."""
+        async with self.transcribe_lock:
+            for record in await asyncio.to_thread(self.store.load):
+                await self.transcribe(record)
+
     async def on_message(self, client: Client, message: Message) -> None:
         async with self.lock:
             if message.id in self.known:  # already read by the backfill
@@ -168,19 +177,29 @@ def archive_for(archives: Archives, message: Message) -> Optional[ChatArchive]:
     return archives.get((chat_id, topic_of(message))) or archives.get((chat_id, None))
 
 
-def register_archive_handlers(app: Client, config: ArchiveConfig, *, group: int = 1) -> Archives:
+def register_archive_handlers(
+    app: Client,
+    archives: Archives,
+    *,
+    refresh: Optional[Callable[[Client], Awaitable[None]]] = None,
+    group: int = 1,
+) -> None:
     """Attach the archive handlers to the bot's client. A separate handler
-    group, so they run independently of the private-chat media saver."""
-    archives: Archives = {
-        key: ChatArchive(ArchiveStore(root), config) for key, root in config.chats.items()
-    }
-    archived_chats = {chat_id for chat_id, _ in archives}
+    group, so they run independently of the private-chat media saver.
+    `archives` may change at runtime (config reload); `refresh` runs before
+    each message to pick such changes up."""
     warned: "set[int]" = set()
 
-    def find(message: Message) -> Optional[ChatArchive]:
+    async def find(client: Client, message: Message) -> Optional[ChatArchive]:
+        if refresh is not None:
+            try:
+                await refresh(client)
+            except Exception:
+                logger.exception("Config refresh failed")
         archive = archive_for(archives, message)
         chat_id = message.chat.id
         # Other topics of an archived chat are skipped silently.
+        archived_chats = {cid for cid, _ in archives}
         if archive is None and chat_id not in archived_chats and chat_id not in warned:
             warned.add(chat_id)
             logger.warning(
@@ -192,7 +211,7 @@ def register_archive_handlers(app: Client, config: ArchiveConfig, *, group: int 
 
     @app.on_message(filters.group, group=group)
     async def handle_message(client: Client, message: Message) -> None:
-        archive = find(message)
+        archive = await find(client, message)
         if archive is None:
             return
         try:
@@ -202,12 +221,10 @@ def register_archive_handlers(app: Client, config: ArchiveConfig, *, group: int 
 
     @app.on_edited_message(filters.group, group=group)
     async def handle_edit(client: Client, message: Message) -> None:
-        archive = find(message)
+        archive = await find(client, message)
         if archive is None:
             return
         try:
             await archive.on_edit(message)
         except Exception:
             logger.exception("Failed to archive edit %s in %s", message.id, message.chat.id)
-
-    return archives
