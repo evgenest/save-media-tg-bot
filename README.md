@@ -112,6 +112,9 @@ Telegram). Их импортирует `mediasaver/archive/tg_export_import.py` 
 uv run --env-file .env.local python -m mediasaver.archive.tg_export_import <папка экспорта> <папка архива> --transcribe
 ```
 
+Запускать из корня репозитория и именно как модуль (`-m`): запуск файлом
+`python mediasaver/archive/tg_export_import.py` упадёт на импортах.
+
 Сообщения, уже записанные ботом, импорт не трогает (id совпадают).
 
 ## Неподдерживаемые сообщения
