@@ -12,8 +12,7 @@ from zoneinfo import ZoneInfo
 
 from mediasaver.archive.render import render_archive
 from mediasaver.archive.config import _speaker_model
-from mediasaver.archive.speakers import claude_cli_namer
-from mediasaver.archive.speech import transcribe_pending
+from mediasaver.archive.speech import claude_passes, transcribe_pending
 from mediasaver.archive.transcribe import MODEL_ID
 from mediasaver.archive.store import ArchiveStore
 from mediasaver.core.downloader import resolve_filename_collision, sanitize_filename
@@ -179,9 +178,7 @@ def main(argv=None) -> int:
                 api_key,
                 max_seconds,
                 model=os.environ.get("STT_MODEL") or MODEL_ID,
-                namer=claude_cli_namer(speaker_model, os.environ.get("CLAUDE_BIN") or None)
-                if speaker_model
-                else None,
+                **claude_passes(speaker_model, os.environ.get("CLAUDE_BIN") or None),
             )
             print(f"Расшифровано: {count}")
 

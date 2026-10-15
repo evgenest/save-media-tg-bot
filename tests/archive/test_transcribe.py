@@ -33,7 +33,9 @@ def test_transcribe_file_sends_multipart(tmp_path):
     assert result.text == "Привіт"
     assert result.words[0]["speaker_id"] == "speaker_0"
     assert b'name="diarize"\r\n\r\ntrue' in seen["body"]
-    assert b'name="timestamps_granularity"\r\n\r\nword' in seen["body"]
+    assert b'name="timestamps_granularity"\r\n\r\ncharacter' in seen["body"]
+    assert b'name="tag_audio_events"\r\n\r\ntrue' in seen["body"]
+    assert result.raw["language_code"] == "ukr"
     assert f'name="model_id"\r\n\r\n{MODEL_ID}'.encode() in seen["body"]
     transcribe_file(audio, "secret", model="scribe_v3", opener=opener)
     assert b'name="model_id"\r\n\r\nscribe_v3' in seen["body"]

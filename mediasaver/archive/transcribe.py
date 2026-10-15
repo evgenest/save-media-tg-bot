@@ -11,8 +11,10 @@ from urllib.error import HTTPError
 
 # Speech-to-text via the ElevenLabs Scribe API (stdlib only, blocking - call
 # it through asyncio.to_thread). Language is auto-detected: chats mix
-# Ukrainian, Russian and English. Diarization and word timestamps are on:
-# the words become timed per-speaker segments (segments.py).
+# Ukrainian, Russian and English. Asks for the most detail Scribe gives:
+# diarization, character-level timestamps (each word with its start, end,
+# speaker_id, logprob and characters) and audio events. The full response is
+# kept as a sidecar file (speech.py); the words become replicas (refine.py).
 
 API_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 # Default Scribe model; STT_MODEL overrides it (hot-reloaded, see live.py).
@@ -30,8 +32,11 @@ class TranscriptionError(RuntimeError):
 @dataclass(frozen=True)
 class Transcript:
     text: str
-    # Scribe words: {"text", "type": word|spacing|audio_event, "start", "end", "speaker_id"}
+    # Scribe words: {"text", "type": word|spacing|audio_event, "start", "end",
+    # "speaker_id", "logprob", "characters"}
     words: "list[dict]" = field(default_factory=list)
+    # the whole API response (language_code, transcription_id, words, …)
+    raw: "dict" = field(default_factory=dict)
 
 
 def build_multipart(fields: "dict[str, str]", file_path: Path) -> "tuple[bytes, str]":
@@ -63,8 +68,8 @@ def transcribe_file(
     body, content_type = build_multipart(
         {
             "model_id": model,
-            "tag_audio_events": "false",
-            "timestamps_granularity": "word",
+            "tag_audio_events": "true",
+            "timestamps_granularity": "character",
             "diarize": "true",
         },
         file_path,
@@ -87,4 +92,4 @@ def transcribe_file(
     if not text:
         # Silence, noise or speech too quiet to make out - not an API failure.
         raise TranscriptionError(NO_SPEECH)
-    return Transcript(text=text, words=list(payload.get("words") or []))
+    return Transcript(text=text, words=list(payload.get("words") or []), raw=payload)

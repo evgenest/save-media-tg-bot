@@ -121,15 +121,21 @@ def render_record(
 
 
 def render_segments(record: dict) -> str:
-    """Timed lines «[m:ss] Name: text»; unnamed voices — «Спикер N» by first appearance."""
+    """Timed lines «[m:ss] Name: text». Segment speaker is a name (semantic
+    pass) or a Scribe id (speaker_N) mapped by transcript_speakers; unnamed
+    ids — «Спикер N» by first appearance."""
     names = dict(record.get("transcript_speakers") or {})
     order: List[str] = []
     lines = ["**Расшифровка:**", ""]
     for segment in record["transcript_segments"]:
         speaker = segment["speaker"]
-        if speaker not in order:
-            order.append(speaker)
-        who = names.get(speaker) or f"Спикер {order.index(speaker) + 1}"
+        who = names.get(speaker)
+        if not who and not speaker.startswith("speaker_"):
+            who = speaker
+        if not who:
+            if speaker not in order:
+                order.append(speaker)
+            who = f"Спикер {order.index(speaker) + 1}"
         lines.append(f"**[{_duration(segment['start'])}] {who}:** {segment['text']}")
         lines.append("")
     return "\n".join(lines).rstrip()

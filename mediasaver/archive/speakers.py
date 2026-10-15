@@ -1,68 +1,38 @@
 from __future__ import annotations
 
-import json
 import logging
-import os
-import shutil
 import subprocess
-from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
+from mediasaver.archive.claude_cli import run_structured
 from mediasaver.archive.segments import speaker_ids
 
 # Diarized speaker ids -> people. One voice: the sender of the message. Several
 # voices (a recorded call): a model guesses who is who from the chat
 # participants, recent messages and the speech itself, through the local
-# Claude Code CLI (`claude -p`, its own login - no API key here). Unknown or
-# failed -> no name, the renderer shows «Спикер N».
+# Claude Code CLI (claude_cli.py). Used when the semantic pass (refine.py)
+# fails. Unknown or failed -> no name, the renderer shows «Спикер N».
 
 log = logging.getLogger(__name__)
 
-DEFAULT_SPEAKER_MODEL = "haiku"  # CLI alias: the newest Haiku
-TIMEOUT_SECONDS = 180
+# CLI alias: the newest Sonnet. Haiku (~10x cheaper) merged question and answer
+# into one replica in about half of the test runs on a 6-min call.
+DEFAULT_SPEAKER_MODEL = "sonnet"
 MAX_SPEECH_CHARS = 20000
 CONTEXT_MESSAGES = 15
 
 Namer = Callable[[str], Dict[str, str]]
 
-_SCHEMA = json.dumps(
-    {
-        "type": "object",
-        "properties": {"speakers": {"type": "object", "additionalProperties": {"type": "string"}}},
-        "required": ["speakers"],
-    }
-)
-
-
-def default_claude_bin() -> str:
-    # systemd --user has no ~/.local/bin in PATH
-    return shutil.which("claude") or str(Path.home() / ".local/bin/claude")
+_SCHEMA = {
+    "type": "object",
+    "properties": {"speakers": {"type": "object", "additionalProperties": {"type": "string"}}},
+    "required": ["speakers"],
+}
 
 
 def claude_cli_namer(model: str = DEFAULT_SPEAKER_MODEL, claude_bin: Optional[str] = None) -> Namer:
     def namer(prompt: str) -> Dict[str, str]:
-        result = subprocess.run(
-            [
-                claude_bin or default_claude_bin(),
-                "-p",
-                "--model", model,
-                "--no-session-persistence",
-                "--tools", "",
-                "--strict-mcp-config",
-                "--setting-sources", "",
-                "--output-format", "json",
-                "--json-schema", _SCHEMA,
-            ],
-            input=prompt,
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT_SECONDS,
-            cwd=os.path.expanduser("~"),
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"claude exit {result.returncode}: {result.stderr[:300]}")
-        payload = json.loads(result.stdout)
-        return (payload.get("structured_output") or {}).get("speakers") or {}
+        return run_structured(prompt, _SCHEMA, model=model, claude_bin=claude_bin).get("speakers") or {}
 
     return namer
 

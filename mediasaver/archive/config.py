@@ -32,8 +32,9 @@ class ArchiveConfig:
     # ElevenLabs Scribe model for transcripts (STT_MODEL).
     stt_model: str
     transcribe_max_seconds: int
-    # Claude model that names voices in multi-speaker audio (SPEAKER_MODEL);
-    # None ("off") = only «Спикер N».
+    # Claude model of the semantic pass over transcripts - replicas by meaning
+    # and who says each (SPEAKER_MODEL); None ("off") = heuristic segments,
+    # only «Спикер N» for several voices.
     speaker_model: Optional[str] = DEFAULT_SPEAKER_MODEL
     # Claude Code CLI binary (CLAUDE_BIN); None = PATH, then ~/.local/bin/claude.
     claude_bin: Optional[str] = None
