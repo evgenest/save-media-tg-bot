@@ -132,3 +132,56 @@ sudo systemctl disable mediasaver-bot   # выключить автозапус�
 Если автозапуск не включён (`enable` не вызывался) — сервис ведёт себя как
 обычный переключатель: `start`/`stop` вручную, когда нужно, без разовой
 настройки заново.
+
+## Вариант 3 — systemd-сервис пользователя (без sudo)
+
+То же, что вариант 2, но юнит живёт в `~/.config/systemd/user/` и
+управляется `systemctl --user` — root не нужен. Чтобы сервис работал без
+открытой SSH-сессии и поднимался после перезагрузки, у пользователя должен
+быть включён lingering (`loginctl show-user $USER -p Linger` → `Linger=yes`;
+включает его администратор: `loginctl enable-linger <user>`).
+
+`~/.config/systemd/user/mediasaver-bot.service`:
+
+```ini
+[Unit]
+Description=Media Saver Telegram bot (+ group archive)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=<путь-к-репозиторию>
+ExecStart=<путь-к-uv> run --frozen --no-dev --env-file .env.local bot.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now mediasaver-bot   # запустить и включить автозапуск
+systemctl --user restart mediasaver-bot        # после обновления кода
+systemctl --user status mediasaver-bot
+journalctl --user -u mediasaver-bot -f         # логи
+```
+
+## Архив группы при деплое
+
+- Папка сессии (`ARCHIVE_SESSION_DIR`, по умолчанию `./sessions`) должна
+  переживать перезапуски: по ней бот догоняет обновления, пришедшие пока он
+  был выключен. Если её потерять, ничего не пропадёт — пропущенное
+  дочитает загрузка истории при старте (по `scanned_until` в `chat.json`).
+- Перезапуск дешёвый: история дочитывается с последнего номера, это 1–2
+  запроса к Telegram. Flood wait бывает только при первой загрузке длинной
+  истории — бот ждёт его сам.
+- Для смены настроек архива (`ARCHIVE_CHATS`, `ELEVENLABS_API_KEY`,
+  `ARCHIVE_TZ`, `TRANSCRIBE_MAX_SECONDS`) перезапуск не нужен, если в
+  `.env.local` задан `CONFIG_FILE` с путём к нему же: бот перечитывает файл
+  сам (см. README, «Архив группового чата»). Токен и обновления кода —
+  `systemctl --user restart mediasaver-bot`.
+- В Docker папки архивов из `ARCHIVE_CHATS` и папку сессии нужно
+  примонтировать томами (как `./storage`), иначе они останутся внутри
+  контейнера и пропадут при пересборке; пути в `ARCHIVE_CHATS` — внутренние
+  пути контейнера.
