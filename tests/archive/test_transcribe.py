@@ -73,3 +73,16 @@ def test_transcribe_pending_records_errors(tmp_path):
     records = store.load()
     assert records[0]["transcript"] == "текст"
     assert records[1]["transcript_error"] == "HTTP 500"
+
+
+def test_transcribe_file_no_speech(tmp_path):
+    from mediasaver.archive.transcribe import NO_SPEECH
+
+    audio = tmp_path / "a.ogg"
+    audio.write_bytes(b"x")
+
+    def opener(req, timeout):
+        return FakeResponse(json.dumps({"text": "", "language_probability": 0.12}).encode())
+
+    with pytest.raises(TranscriptionError, match=NO_SPEECH):
+        transcribe_file(audio, "k", opener=opener)

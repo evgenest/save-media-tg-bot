@@ -15,6 +15,7 @@ from urllib.error import HTTPError
 API_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 MODEL_ID = "scribe_v2"
 TIMEOUT_SECONDS = 600
+NO_SPEECH = "речь не распознана — тишина, шум или слишком тихо"
 
 
 class TranscriptionError(RuntimeError):
@@ -66,5 +67,6 @@ def transcribe_file(
         raise TranscriptionError(str(exc)) from exc
     text = (payload.get("text") or "").strip()
     if not text:
-        raise TranscriptionError("пустой ответ")
+        # Silence, noise or speech too quiet to make out - not an API failure.
+        raise TranscriptionError(NO_SPEECH)
     return text
