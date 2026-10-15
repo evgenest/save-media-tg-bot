@@ -115,3 +115,29 @@ def test_build_live_archives(tmp_path):
     live = build_live_archives({"CONFIG_FILE": str(tmp_path / ".env.local")})
     assert live is not None and live.archives == {} and live.config is None
     assert live.session_dir == Path("sessions")
+
+
+async def test_changed_key_retries_failed_transcripts(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(archive_speech, "transcribe_file", lambda path, key: calls.append(key) or "текст")
+    root = tmp_path / "a"
+    live, env_file = make_live(tmp_path, f"ARCHIVE_CHATS=-1={root}\nELEVENLABS_API_KEY=bad\n")
+    store = live.archives[(-1, None)].store
+    store.append({"id": 1, "date": "2026-10-15T10:00:00+00:00", "kind": "voice",
+                  "media": [{"kind": "voice", "path": "media/1.ogg"}],
+                  "transcript_error": "HTTP 401: Invalid API key"})
+
+    # Same key, unrelated edit: a failed record is not retried.
+    write_env(env_file, f"ARCHIVE_CHATS=-1={root}\nELEVENLABS_API_KEY=bad\nARCHIVE_TZ=UTC\n", 10)
+    await live.refresh(client=None)
+    await asyncio.gather(*live._tasks)
+    assert calls == []
+
+    write_env(env_file, f"ARCHIVE_CHATS=-1={root}\nELEVENLABS_API_KEY=good\n", 20)
+    await live.refresh(client=None)
+    await asyncio.gather(*live._tasks)
+
+    record = store.load()[0]
+    assert calls == ["good"]
+    assert record["transcript"] == "текст"
+    assert record["transcript_error"] is None

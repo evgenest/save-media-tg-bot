@@ -52,6 +52,8 @@ def test_needs_transcript():
     assert needs_transcript(voice, 1800)
     assert not needs_transcript({**voice, "transcript": "x"}, 1800)
     assert not needs_transcript({**voice, "transcript_error": "x"}, 1800)
+    assert needs_transcript({**voice, "transcript_error": "x"}, 1800, retry_errors=True)
+    assert not needs_transcript({**voice, "transcript": "t"}, 1800, retry_errors=True)
     assert not needs_transcript({"kind": "voice", "media": [{"error": "x"}]}, 1800)
     assert not needs_transcript({"kind": "photo", "media": [{"path": "p"}]}, 1800)
     assert not needs_transcript(voice, 5)

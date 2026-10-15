@@ -45,7 +45,7 @@ def parse_env_file(text: str) -> Dict[str, str]:
 class Changes:
     added: List[ArchiveKey] = field(default_factory=list)
     removed: List[ArchiveKey] = field(default_factory=list)
-    transcription: bool = False  # key appeared/changed or limit raised
+    transcription: bool = False  # key appeared/changed or limit raised: retry failed too
     timezone: bool = False
 
 
@@ -156,7 +156,7 @@ class LiveArchives:
             self._spawn(backfill_chat(client, chat_id, self.archives))
         if changes.transcription:
             for archive in list(self.archives.values()):
-                self._spawn(archive.transcribe_pending())
+                self._spawn(archive.transcribe_pending(retry_errors=True))
         if changes.timezone:
             for archive in list(self.archives.values()):
                 async with archive.lock:

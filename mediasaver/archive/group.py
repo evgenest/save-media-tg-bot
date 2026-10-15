@@ -126,9 +126,9 @@ class ChatArchive:
                 await self.render()
         return record
 
-    async def transcribe(self, record: dict) -> None:
+    async def transcribe(self, record: dict, *, retry_errors: bool = False) -> None:
         if not self.config.elevenlabs_api_key or not needs_transcript(
-            record, self.config.transcribe_max_seconds
+            record, self.config.transcribe_max_seconds, retry_errors=retry_errors
         ):
             return
         await asyncio.to_thread(
@@ -137,12 +137,12 @@ class ChatArchive:
         async with self.lock:
             await self.render()
 
-    async def transcribe_pending(self) -> None:
+    async def transcribe_pending(self, *, retry_errors: bool = False) -> None:
         """Transcribe every record still waiting for it (e.g. received before
         the ElevenLabs key was set)."""
         async with self.transcribe_lock:
             for record in await asyncio.to_thread(self.store.load):
-                await self.transcribe(record)
+                await self.transcribe(record, retry_errors=retry_errors)
 
     async def on_message(self, client: Client, message: Message) -> None:
         async with self.lock:

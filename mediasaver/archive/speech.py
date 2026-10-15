@@ -10,10 +10,14 @@ from mediasaver.archive.transcribe import TranscriptionError, transcribe_file
 # runs it via asyncio.to_thread.
 
 
-def needs_transcript(record: dict, max_seconds: int) -> bool:
+def needs_transcript(record: dict, max_seconds: int, *, retry_errors: bool = False) -> bool:
+    """retry_errors: also redo failed ones - after the key changed, a 401
+    from the old key says nothing about the new one."""
     if record.get("kind") not in SPEECH_KINDS:
         return False
-    if record.get("transcript") or record.get("transcript_error"):
+    if record.get("transcript"):
+        return False
+    if record.get("transcript_error") and not retry_errors:
         return False
     media = [item for item in record.get("media") or [] if item.get("path")]
     if not media:
@@ -33,7 +37,7 @@ def transcribe_record(
     path = store.root / record["media"][0]["path"]
     try:
         text = (transcriber or transcribe_file)(path, api_key)
-        update = {"id": record["id"], "transcript": text}
+        update = {"id": record["id"], "transcript": text, "transcript_error": None}
     except (TranscriptionError, OSError) as exc:
         update = {"id": record["id"], "transcript_error": str(exc)[:300]}
     store.append(update)
