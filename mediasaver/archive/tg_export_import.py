@@ -11,6 +11,8 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from mediasaver.archive.render import render_archive
+from mediasaver.archive.config import _speaker_model
+from mediasaver.archive.speakers import claude_cli_namer
 from mediasaver.archive.speech import transcribe_pending
 from mediasaver.archive.transcribe import MODEL_ID
 from mediasaver.archive.store import ArchiveStore
@@ -171,8 +173,15 @@ def main(argv=None) -> int:
             print("ELEVENLABS_API_KEY не задан — расшифровка пропущена", file=sys.stderr)
         else:
             max_seconds = int(os.environ.get("TRANSCRIBE_MAX_SECONDS") or 1800)
+            speaker_model = _speaker_model(os.environ.get("SPEAKER_MODEL"))
             count = transcribe_pending(
-                store, api_key, max_seconds, model=os.environ.get("STT_MODEL") or MODEL_ID
+                store,
+                api_key,
+                max_seconds,
+                model=os.environ.get("STT_MODEL") or MODEL_ID,
+                namer=claude_cli_namer(speaker_model, os.environ.get("CLAUDE_BIN") or None)
+                if speaker_model
+                else None,
             )
             print(f"Расшифровано: {count}")
 

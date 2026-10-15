@@ -4,6 +4,7 @@ from pathlib import Path
 
 from mediasaver.archive import speech as archive_speech
 from mediasaver.archive.config import load_archive_config
+from mediasaver.archive.transcribe import Transcript
 from mediasaver.archive.live import LiveArchives, diff_configs, parse_env_file
 
 
@@ -93,7 +94,7 @@ def test_bad_config_keeps_previous(tmp_path):
 
 async def test_new_key_transcribes_pending_voices(tmp_path, monkeypatch):
     calls = []
-    monkeypatch.setattr(archive_speech, "transcribe_file", lambda path, key, model: calls.append(key) or "текст")
+    monkeypatch.setattr(archive_speech, "transcribe_file", lambda path, key, model: calls.append(key) or Transcript("текст"))
     root = tmp_path / "a"
     live, env_file = make_live(tmp_path, f"ARCHIVE_CHATS=-1={root}\n")
     store = live.archives[(-1, None)].store
@@ -119,7 +120,7 @@ def test_build_live_archives(tmp_path):
 
 async def test_changed_key_retries_failed_transcripts(tmp_path, monkeypatch):
     calls = []
-    monkeypatch.setattr(archive_speech, "transcribe_file", lambda path, key, model: calls.append(key) or "текст")
+    monkeypatch.setattr(archive_speech, "transcribe_file", lambda path, key, model: calls.append(key) or Transcript("текст"))
     root = tmp_path / "a"
     live, env_file = make_live(tmp_path, f"ARCHIVE_CHATS=-1={root}\nELEVENLABS_API_KEY=bad\n")
     store = live.archives[(-1, None)].store
@@ -145,7 +146,7 @@ async def test_changed_key_retries_failed_transcripts(tmp_path, monkeypatch):
 
 async def test_stt_model_is_hot_reloaded(tmp_path, monkeypatch):
     models = []
-    monkeypatch.setattr(archive_speech, "transcribe_file", lambda path, key, model: models.append(model) or "т")
+    monkeypatch.setattr(archive_speech, "transcribe_file", lambda path, key, model: models.append(model) or Transcript("т"))
     root = tmp_path / "a"
     live, env_file = make_live(tmp_path, f"ARCHIVE_CHATS=-1={root}\nELEVENLABS_API_KEY=k\n")
     archive = live.archives[(-1, None)]

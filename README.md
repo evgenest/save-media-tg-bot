@@ -73,6 +73,8 @@
 | `ELEVENLABS_API_KEY` | Ключ ElevenLabs для расшифровки голосовых; пусто — без расшифровки |
 | `STT_MODEL`       | Модель ElevenLabs Scribe для расшифровки (по умолч. `scribe_v2`) |
 | `TRANSCRIBE_MAX_SECONDS` | Не расшифровывать длиннее, сек (по умолч. 1800) |
+| `SPEAKER_MODEL`   | Модель Claude, которая подписывает голоса в записях с несколькими спикерами (по умолч. `haiku`); `off` — только «Спикер N» |
+| `CLAUDE_BIN`      | Путь к Claude Code CLI (по умолч. из `PATH`, затем `~/.local/bin/claude`) |
 | `CONFIG_FILE`     | Путь к env-файлу для горячей подгрузки настроек архива; пусто — только при старте |
 
 ## Архив группового чата
@@ -97,6 +99,21 @@ entities — диалект `.markdown` Pyrogram для архива не год
 Автоматически узнать новейшую модель нельзя: `/v1/models` ElevenLabs отдаёт
 только модели синтеза и преобразования голоса, моделей Scribe там нет.
 Пустой ответ (тишина, шум, слишком тихо) помечается «речь не распознана».
+
+Расшифровка идёт с разметкой по голосам (`diarize`) и таймкодами слов: в
+архиве она выводится репликами `[м:сс] Имя: текст` — новая реплика при смене
+голоса или паузе от 2 с. В `messages.jsonl` — `transcript_segments`
+(`start`, `end`, `speaker`, `text`) и `transcript_speakers` (`speaker_N` → имя).
+Один голос — это отправитель сообщения. Несколько голосов (запись созвона) —
+имена угадывает модель Claude через локальный Claude Code CLI (`claude -p`,
+его собственный вход; `SPEAKER_MODEL`, `CLAUDE_BIN`) по списку участников чата,
+последним сообщениям и самой речи. Не уверена, CLI нет (Docker) или ошибка —
+«Спикер 1», «Спикер 2». Старые расшифровки (до таймкодов) остаются сплошным
+текстом; переделать выбранные:
+
+```bash
+uv run --env-file .env.local python -m mediasaver.archive.retranscribe <папка архива> <id> [<id> …]
+```
 
 Структура папки чата:
 
@@ -190,7 +207,7 @@ uv export --no-dev --no-hashes --no-emit-project -o requirements.txt
 Структура: `bot.py` (точка входа) и пакет `mediasaver/` — `core/` (config,
 storage, batch_manager, downloader), `media/` (text_export, rich_markdown,
 rich_media, unsupported), `archive/` (архив чата, tg_markdown, transcribe,
-tg_export_import). Тесты зеркалят пакеты в `tests/`. Все модули пакета
+segments, speakers, retranscribe, tg_export_import). Тесты зеркалят пакеты в `tests/`. Все модули пакета
 покрыты юнит-тестами без обращения к реальному Telegram
 API. `bot.py` проверен лёгким smoke-тестом, который собирает приложение без
 сетевых вызовов.

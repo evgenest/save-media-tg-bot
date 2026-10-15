@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 from urllib import request
@@ -10,7 +11,8 @@ from urllib.error import HTTPError
 
 # Speech-to-text via the ElevenLabs Scribe API (stdlib only, blocking - call
 # it through asyncio.to_thread). Language is auto-detected: chats mix
-# Ukrainian, Russian and English.
+# Ukrainian, Russian and English. Diarization and word timestamps are on:
+# the words become timed per-speaker segments (segments.py).
 
 API_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 # Default Scribe model; STT_MODEL overrides it (hot-reloaded, see live.py).
@@ -23,6 +25,13 @@ NO_SPEECH = "речь не распознана — тишина, шум или 
 
 class TranscriptionError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class Transcript:
+    text: str
+    # Scribe words: {"text", "type": word|spacing|audio_event, "start", "end", "speaker_id"}
+    words: "list[dict]" = field(default_factory=list)
 
 
 def build_multipart(fields: "dict[str, str]", file_path: Path) -> "tuple[bytes, str]":
@@ -50,9 +59,14 @@ def transcribe_file(
     *,
     model: str = MODEL_ID,
     opener: Optional[Callable] = None,
-) -> str:
+) -> Transcript:
     body, content_type = build_multipart(
-        {"model_id": model, "tag_audio_events": "false", "timestamps_granularity": "none"},
+        {
+            "model_id": model,
+            "tag_audio_events": "false",
+            "timestamps_granularity": "word",
+            "diarize": "true",
+        },
         file_path,
     )
     req = request.Request(
@@ -73,4 +87,4 @@ def transcribe_file(
     if not text:
         # Silence, noise or speech too quiet to make out - not an API failure.
         raise TranscriptionError(NO_SPEECH)
-    return text
+    return Transcript(text=text, words=list(payload.get("words") or []))

@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from mediasaver.archive import speech as archive_speech
 from mediasaver.archive.config import ArchiveConfig
+from mediasaver.archive.transcribe import Transcript
 from tests.archive.archive_fakes import FakeClient, message
 from mediasaver.archive.store import ArchiveStore
 from mediasaver.archive.group import ChatArchive, media_file_name
@@ -65,7 +66,7 @@ async def test_voice_is_transcribed(tmp_path, monkeypatch):
 
     def fake_transcribe(path, api_key, model):
         calls.append((Path(path).name, api_key, model))
-        return "Добрий день"
+        return Transcript("Добрий день")
 
     monkeypatch.setattr(archive_speech, "transcribe_file", fake_transcribe)
     archive = make_archive(tmp_path, api_key="key")

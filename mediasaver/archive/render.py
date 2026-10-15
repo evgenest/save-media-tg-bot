@@ -111,11 +111,28 @@ def render_record(
         parts.append(f"*[{record['extra']}]*")
     for item in record.get("media") or []:
         parts.append(render_media(item))
-    if record.get("transcript"):
+    if record.get("transcript_segments"):
+        parts.append(_quote_block(render_segments(record)))
+    elif record.get("transcript"):
         parts.append(_quote_block(f"**Расшифровка:** {record['transcript']}"))
     elif record.get("transcript_error"):
         parts.append(f"*[расшифровка не удалась: {record['transcript_error']}]*")
     return "\n\n".join(parts)
+
+
+def render_segments(record: dict) -> str:
+    """Timed lines «[m:ss] Name: text»; unnamed voices — «Спикер N» by first appearance."""
+    names = dict(record.get("transcript_speakers") or {})
+    order: List[str] = []
+    lines = ["**Расшифровка:**", ""]
+    for segment in record["transcript_segments"]:
+        speaker = segment["speaker"]
+        if speaker not in order:
+            order.append(speaker)
+        who = names.get(speaker) or f"Спикер {order.index(speaker) + 1}"
+        lines.append(f"**[{_duration(segment['start'])}] {who}:** {segment['text']}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
 
 def _record_snippet(record: Optional[dict]) -> str:

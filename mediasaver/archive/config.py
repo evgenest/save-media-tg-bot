@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Mapping, Optional, Tuple
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from mediasaver.archive.speakers import DEFAULT_SPEAKER_MODEL
 from mediasaver.archive.transcribe import MODEL_ID
 from mediasaver.core.config import ConfigError
 
@@ -31,6 +32,11 @@ class ArchiveConfig:
     # ElevenLabs Scribe model for transcripts (STT_MODEL).
     stt_model: str
     transcribe_max_seconds: int
+    # Claude model that names voices in multi-speaker audio (SPEAKER_MODEL);
+    # None ("off") = only «Спикер N».
+    speaker_model: Optional[str] = DEFAULT_SPEAKER_MODEL
+    # Claude Code CLI binary (CLAUDE_BIN); None = PATH, then ~/.local/bin/claude.
+    claude_bin: Optional[str] = None
 
 
 def parse_chats(raw: str) -> "dict[ArchiveKey, Path]":
@@ -76,4 +82,13 @@ def load_archive_config(env: Mapping[str, str]) -> Optional[ArchiveConfig]:
         elevenlabs_api_key=env.get("ELEVENLABS_API_KEY") or None,
         stt_model=(env.get("STT_MODEL") or "").strip() or MODEL_ID,
         transcribe_max_seconds=max_seconds,
+        speaker_model=_speaker_model(env.get("SPEAKER_MODEL")),
+        claude_bin=(env.get("CLAUDE_BIN") or "").strip() or None,
     )
+
+
+def _speaker_model(raw: Optional[str]) -> Optional[str]:
+    value = (raw or "").strip()
+    if value.lower() == "off":
+        return None
+    return value or DEFAULT_SPEAKER_MODEL

@@ -6,7 +6,7 @@ import pytest
 
 from mediasaver.archive.speech import needs_transcript, transcribe_pending
 from mediasaver.archive.store import ArchiveStore
-from mediasaver.archive.transcribe import API_URL, MODEL_ID, TranscriptionError, transcribe_file
+from mediasaver.archive.transcribe import API_URL, MODEL_ID, Transcript, TranscriptionError, transcribe_file
 
 
 class FakeResponse(io.BytesIO):
@@ -26,9 +26,14 @@ def test_transcribe_file_sends_multipart(tmp_path):
         seen["url"] = req.full_url
         seen["key"] = req.get_header("Xi-api-key")
         seen["body"] = req.data
-        return FakeResponse(json.dumps({"text": " Привіт ", "language_code": "ukr"}).encode())
+        words = [{"text": "Привіт", "type": "word", "start": 0.1, "end": 0.5, "speaker_id": "speaker_0"}]
+        return FakeResponse(json.dumps({"text": " Привіт ", "language_code": "ukr", "words": words}).encode())
 
-    assert transcribe_file(audio, "secret", opener=opener) == "Привіт"
+    result = transcribe_file(audio, "secret", opener=opener)
+    assert result.text == "Привіт"
+    assert result.words[0]["speaker_id"] == "speaker_0"
+    assert b'name="diarize"\r\n\r\ntrue' in seen["body"]
+    assert b'name="timestamps_granularity"\r\n\r\nword' in seen["body"]
     assert f'name="model_id"\r\n\r\n{MODEL_ID}'.encode() in seen["body"]
     transcribe_file(audio, "secret", model="scribe_v3", opener=opener)
     assert b'name="model_id"\r\n\r\nscribe_v3' in seen["body"]
@@ -71,7 +76,7 @@ def test_transcribe_pending_records_errors(tmp_path):
     def transcriber(path, key, model):
         if path.name == "2.mp3":
             raise TranscriptionError("HTTP 500")
-        return "текст"
+        return Transcript("текст")
 
     assert transcribe_pending(store, "k", 1800, transcriber=transcriber, log=lambda _: None) == 2
     records = store.load()

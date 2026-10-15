@@ -38,3 +38,11 @@ def test_defaults():
 def test_bad_timezone():
     with pytest.raises(ConfigError):
         load_archive_config({"ARCHIVE_CHATS": "-1001=/x", "ARCHIVE_TZ": "Mars/Base"})
+
+
+def test_speaker_model():
+    base = {"ARCHIVE_CHATS": "-1001=/x"}
+    assert load_archive_config(base).speaker_model == "haiku"
+    assert load_archive_config({**base, "SPEAKER_MODEL": "sonnet"}).speaker_model == "sonnet"
+    assert load_archive_config({**base, "SPEAKER_MODEL": "off"}).speaker_model is None
+    assert load_archive_config({**base, "CLAUDE_BIN": "/opt/claude"}).claude_bin == "/opt/claude"

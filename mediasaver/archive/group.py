@@ -18,6 +18,7 @@ from mediasaver.archive.record import (
     topic_of,
 )
 from mediasaver.archive.render import render_archive
+from mediasaver.archive.speakers import claude_cli_namer
 from mediasaver.archive.speech import needs_transcript, transcribe_record
 from mediasaver.archive.store import ArchiveStore
 from mediasaver.core.downloader import resolve_filename_collision, sanitize_filename
@@ -137,6 +138,11 @@ class ChatArchive:
             record,
             self.config.elevenlabs_api_key,
             model=self.config.stt_model,
+            namer=(
+                claude_cli_namer(self.config.speaker_model, self.config.claude_bin)
+                if self.config.speaker_model
+                else None
+            ),
         )
         async with self.lock:
             await self.render()
