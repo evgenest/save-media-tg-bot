@@ -58,7 +58,8 @@ class ChatArchive:
         self.known: "set[int]" = store.known_ids()
 
     async def render(self) -> None:
-        title = self.store.read_meta().get("title") or "Telegram"
+        meta = self.store.read_meta()
+        title = meta.get("topic_title") or meta.get("title") or "Telegram"
         records = await asyncio.to_thread(self.store.load)
         await asyncio.to_thread(render_archive, self.store.root, records, self.config.timezone, title)
 
@@ -88,6 +89,10 @@ class ChatArchive:
         title = getattr(message.chat, "title", None)
         if title and self.store.read_meta().get("title") != title:
             self.store.update_meta(id=message.chat.id, title=title)
+
+        topic = getattr(message, "forum_topic_created", None)
+        if topic is not None and getattr(topic, "title", None):
+            self.store.update_meta(topic_title=topic.title)
 
         kind = message_kind(message)
         attachments = None

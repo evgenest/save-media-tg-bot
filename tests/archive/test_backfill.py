@@ -72,6 +72,7 @@ async def test_backfill_reads_only_its_topic_and_remembers_position(tmp_path):
     assert all(call[2] == 0 for call in client.calls)  # no reply fetching
     day = (tmp_path / "cf" / "days").iterdir().__next__().read_text(encoding="utf-8")
     assert "по колористике" in day and "другой проект" not in day
+    assert day.startswith("# лендинг — ")  # the topic's title, not the group's
 
     # Second start: resumes after the last seen id, nothing re-added.
     client.calls.clear()
