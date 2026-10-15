@@ -4,7 +4,7 @@ from typing import Optional
 
 import pytest
 
-from downloader import (
+from mediasaver.core.downloader import (
     DownloadResult,
     MediaInfo,
     build_default_filename,

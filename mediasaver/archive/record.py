@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from rich_markdown import render_rich_message
-from tg_markdown import entities_to_markdown, pyrogram_entities
+from mediasaver.media.rich_markdown import render_rich_message
+from mediasaver.archive.tg_markdown import entities_to_markdown, pyrogram_entities
 
 # Pyrogram Message -> archive record (plain dict, stored as JSON). Media files
 # are downloaded separately (archive_bot.py) and added under "media".

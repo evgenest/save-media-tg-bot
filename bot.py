@@ -17,14 +17,14 @@ from pyrogram.types import (
     Message,
 )
 
-from archive_config import ArchiveConfig, load_archive_config
-from batch_manager import Batch, BatchManager, BatchPhase
-from config import Config, load_config
-from downloader import DownloadResult, download_media_message, extract_media_info
-from group_archive import register_archive_handlers
-from storage import Manifest, ManifestEntry, create_batch_dir
-from text_export import is_text_message, save_text_message
-from unsupported import (
+from mediasaver.archive.config import ArchiveConfig, load_archive_config
+from mediasaver.core.batch_manager import Batch, BatchManager, BatchPhase
+from mediasaver.core.config import Config, load_config
+from mediasaver.core.downloader import DownloadResult, download_media_message, extract_media_info
+from mediasaver.archive.group import register_archive_handlers
+from mediasaver.core.storage import Manifest, ManifestEntry, create_batch_dir
+from mediasaver.media.text_export import is_text_message, save_text_message
+from mediasaver.media.unsupported import (
     FIXED_DATA_PREFIX,
     REPORT_NO_DATA,
     REPORT_YES_DATA,

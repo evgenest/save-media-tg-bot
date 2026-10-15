@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from archive_config import load_archive_config, parse_chats
-from config import ConfigError
+from mediasaver.archive.config import load_archive_config, parse_chats
+from mediasaver.core.config import ConfigError
 
 
 def test_archive_off_without_chats():

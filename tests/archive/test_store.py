@@ -1,4 +1,4 @@
-from archive_store import ArchiveStore
+from mediasaver.archive.store import ArchiveStore
 
 
 def test_updates_fold_by_id(tmp_path):

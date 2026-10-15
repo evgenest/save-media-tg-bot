@@ -1,7 +1,7 @@
 import json
 
-from archive_store import ArchiveStore
-from tg_export_import import main
+from mediasaver.archive.store import ArchiveStore
+from mediasaver.archive.tg_export_import import main
 
 
 def write_export(export_dir, messages):

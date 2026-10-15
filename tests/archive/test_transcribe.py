@@ -4,9 +4,9 @@ from urllib.error import HTTPError
 
 import pytest
 
-from archive_speech import needs_transcript, transcribe_pending
-from archive_store import ArchiveStore
-from transcribe import API_URL, MODEL_ID, TranscriptionError, transcribe_file
+from mediasaver.archive.speech import needs_transcript, transcribe_pending
+from mediasaver.archive.store import ArchiveStore
+from mediasaver.archive.transcribe import API_URL, MODEL_ID, TranscriptionError, transcribe_file
 
 
 class FakeResponse(io.BytesIO):

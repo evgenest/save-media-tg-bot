@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from config import Config, ConfigError, load_config
+from mediasaver.core.config import Config, ConfigError, load_config
 
 VALID_ENV = {
     "API_ID": "12345",

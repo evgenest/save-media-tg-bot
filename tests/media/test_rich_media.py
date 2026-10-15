@@ -4,8 +4,8 @@ from typing import Optional
 
 from pyrogram import types
 
-from rich_media import attachment_extension, download_rich_media
-from text_export import save_text_message
+from mediasaver.media.rich_media import attachment_extension, download_rich_media
+from mediasaver.media.text_export import save_text_message
 
 
 class FakeClient:

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Mapping, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from config import ConfigError
+from mediasaver.core.config import ConfigError
 
 # Group archive mode (group_archive.py): the same bot, added to a group chat,
 # silently records every message into a markdown archive. Optional - enabled

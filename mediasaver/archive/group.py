@@ -8,13 +8,13 @@ from typing import Dict, Optional
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from archive_config import ArchiveConfig
-from archive_record import MEDIA_KINDS, build_record, markdown_body, media_meta, message_kind
-from archive_render import render_archive
-from archive_speech import needs_transcript, transcribe_record
-from archive_store import ArchiveStore
-from downloader import resolve_filename_collision, sanitize_filename
-from rich_media import download_rich_media
+from mediasaver.archive.config import ArchiveConfig
+from mediasaver.archive.record import MEDIA_KINDS, build_record, markdown_body, media_meta, message_kind
+from mediasaver.archive.render import render_archive
+from mediasaver.archive.speech import needs_transcript, transcribe_record
+from mediasaver.archive.store import ArchiveStore
+from mediasaver.core.downloader import resolve_filename_collision, sanitize_filename
+from mediasaver.media.rich_media import download_rich_media
 
 # Group archive mode: the bot sits in the configured group chats and silently
 # records every message (text, formatting, media, voice transcripts, replies,

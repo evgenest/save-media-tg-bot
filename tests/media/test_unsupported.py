@@ -4,7 +4,7 @@ from typing import Optional
 
 from pyrogram import enums
 
-from unsupported import (
+from mediasaver.media.unsupported import (
     FIXED_NOTICE_TEXT,
     NOT_FORWARDED_TEXT,
     OWNER_REPORT_HINT,

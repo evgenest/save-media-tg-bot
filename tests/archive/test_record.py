@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from archive_record import build_record, message_kind, snippet
-from archive_fakes import entity, message, user
+from mediasaver.archive.record import build_record, message_kind, snippet
+from tests.archive.archive_fakes import entity, message, user
 
 
 def test_text_message_record():

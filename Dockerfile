@@ -9,6 +9,7 @@ RUN apt-get update \
     && apt-get purge -y --auto-remove gcc libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY *.py ./
+COPY bot.py ./
+COPY mediasaver/ ./mediasaver/
 
 CMD ["python", "bot.py"]

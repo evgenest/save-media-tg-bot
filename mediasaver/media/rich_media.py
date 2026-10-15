@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Awaitable, Callable, Dict, List, Optional
 
-from downloader import resolve_filename_collision, sanitize_filename
-from rich_markdown import iter_media_blocks, media_of
+from mediasaver.core.downloader import resolve_filename_collision, sanitize_filename
+from mediasaver.media.rich_markdown import iter_media_blocks, media_of
 
 ProgressFactory = Callable[[str], Callable[[int, int], Awaitable[None]]]
 

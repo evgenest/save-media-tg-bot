@@ -3,9 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from downloader import DownloadResult, resolve_filename_collision, sanitize_filename
-from rich_markdown import Attachments, render_rich_message
-from rich_media import ProgressFactory, RichMediaResult, download_rich_media
+from mediasaver.core.downloader import DownloadResult, resolve_filename_collision, sanitize_filename
+from mediasaver.media.rich_markdown import Attachments, render_rich_message
+from mediasaver.media.rich_media import ProgressFactory, RichMediaResult, download_rich_media
 
 TEXT_MEDIA_TYPE = "text"
 

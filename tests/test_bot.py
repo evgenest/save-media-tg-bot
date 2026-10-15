@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from batch_manager import Batch, BatchPhase
+from mediasaver.core.batch_manager import Batch, BatchPhase
 from bot import (
     BotState,
     LiveProgress,
@@ -18,7 +18,7 @@ from bot import (
     make_progress_callback,
     refresh_status_message,
 )
-from config import Config
+from mediasaver.core.config import Config
 
 
 def make_batch(**overrides):
@@ -203,7 +203,7 @@ def test_build_bot_commands_includes_start_and_help():
 def test_create_app_with_group_archive_uses_persistent_session(tmp_path):
     from zoneinfo import ZoneInfo
 
-    from archive_config import ArchiveConfig
+    from mediasaver.archive.config import ArchiveConfig
 
     archive_config = ArchiveConfig(
         chats={-100: tmp_path / "archive"},

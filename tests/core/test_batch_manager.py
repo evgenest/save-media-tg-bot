@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from batch_manager import BatchManager, BatchPhase
-from downloader import DownloadResult
+from mediasaver.core.batch_manager import BatchManager, BatchPhase
+from mediasaver.core.downloader import DownloadResult
 
 
 class FakeTimerHandle:

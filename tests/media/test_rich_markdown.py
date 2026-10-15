@@ -3,8 +3,8 @@ from typing import Optional
 
 from pyrogram import types
 
-from rich_markdown import render_rich_message, render_rich_text
-from text_export import is_text_message, render_message_markdown
+from mediasaver.media.rich_markdown import render_rich_message, render_rich_text
+from mediasaver.media.text_export import is_text_message, render_message_markdown
 
 
 def ordered_item(label: str, text) -> types.RichBlockListItem:

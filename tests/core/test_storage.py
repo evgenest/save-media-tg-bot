@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 
-from storage import Manifest, ManifestEntry, create_batch_dir
+from mediasaver.core.storage import Manifest, ManifestEntry, create_batch_dir
 
 
 def test_create_batch_dir_creates_directory_with_timestamp_name(tmp_path):

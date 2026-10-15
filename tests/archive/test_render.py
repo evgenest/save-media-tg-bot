@@ -1,6 +1,6 @@
 from zoneinfo import ZoneInfo
 
-from archive_render import render_archive, render_media
+from mediasaver.archive.render import render_archive, render_media
 
 TZ = ZoneInfo("Europe/Berlin")
 

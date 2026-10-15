@@ -10,11 +10,11 @@ from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from archive_render import render_archive
-from archive_speech import transcribe_pending
-from archive_store import ArchiveStore
-from downloader import resolve_filename_collision, sanitize_filename
-from tg_markdown import export_pieces_to_markdown
+from mediasaver.archive.render import render_archive
+from mediasaver.archive.speech import transcribe_pending
+from mediasaver.archive.store import ArchiveStore
+from mediasaver.core.downloader import resolve_filename_collision, sanitize_filename
+from mediasaver.archive.tg_markdown import export_pieces_to_markdown
 
 # Imports a Telegram Desktop chat export (Export chat history -> JSON, with
 # media) into a group archive, in the same format the bot writes. Bots can't

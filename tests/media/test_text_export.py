@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from downloader import DownloadResult
-from text_export import build_default_filename, render_message_markdown, save_text_message
+from mediasaver.core.downloader import DownloadResult
+from mediasaver.media.text_export import build_default_filename, render_message_markdown, save_text_message
 
 
 class FakeStr(str):

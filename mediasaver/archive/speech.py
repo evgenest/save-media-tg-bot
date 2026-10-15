@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
-from archive_record import SPEECH_KINDS
-from archive_store import ArchiveStore
-from transcribe import TranscriptionError, transcribe_file
+from mediasaver.archive.record import SPEECH_KINDS
+from mediasaver.archive.store import ArchiveStore
+from mediasaver.archive.transcribe import TranscriptionError, transcribe_file
 
 # Transcription of archived voice/audio/video. Blocking (network) - the bot
 # runs it via asyncio.to_thread.

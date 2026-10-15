@@ -8,7 +8,7 @@ from enum import Enum
 from itertools import count
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Protocol
 
-from downloader import DownloadResult
+from mediasaver.core.downloader import DownloadResult
 
 
 class TimerHandle(Protocol):

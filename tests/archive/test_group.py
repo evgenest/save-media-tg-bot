@@ -3,11 +3,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-import archive_speech
-from archive_config import ArchiveConfig
-from archive_fakes import FakeClient, message
-from archive_store import ArchiveStore
-from group_archive import ChatArchive, media_file_name
+from mediasaver.archive import speech as archive_speech
+from mediasaver.archive.config import ArchiveConfig
+from tests.archive.archive_fakes import FakeClient, message
+from mediasaver.archive.store import ArchiveStore
+from mediasaver.archive.group import ChatArchive, media_file_name
 
 
 def make_archive(tmp_path, api_key=None):

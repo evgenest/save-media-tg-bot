@@ -105,11 +105,11 @@ chat.json        название чата
 сообщения, пришедшие пока бот был выключен, он догоняет при старте.
 
 Сообщения, отправленные до добавления бота, ему недоступны (ограничение
-Telegram). Их импортирует `tg_export_import.py` из экспорта Telegram Desktop
+Telegram). Их импортирует `mediasaver/archive/tg_export_import.py` из экспорта Telegram Desktop
 (чат → ⋮ → Export chat history, формат JSON, с фото, файлами и голосовыми):
 
 ```bash
-uv run --env-file .env.local tg_export_import.py <папка экспорта> <папка архива> --transcribe
+uv run --env-file .env.local python -m mediasaver.archive.tg_export_import <папка экспорта> <папка архива> --transcribe
 ```
 
 Сообщения, уже записанные ботом, импорт не трогает (id совпадают).
@@ -153,9 +153,10 @@ uv lock --upgrade-package <пакет>          # обновить один па
 uv export --no-dev --no-hashes --no-emit-project -o requirements.txt
 ```
 
-Модули архива (`archive_*.py`, `group_archive.py`, `tg_markdown.py`,
-`transcribe.py`, `tg_export_import.py`) и `config.py`, `storage.py`, `downloader.py`, `text_export.py`,
-`rich_markdown.py`, `rich_media.py`, `unsupported.py` и `batch_manager.py`
+Структура: `bot.py` (точка входа) и пакет `mediasaver/` — `core/` (config,
+storage, batch_manager, downloader), `media/` (text_export, rich_markdown,
+rich_media, unsupported), `archive/` (архив чата, tg_markdown, transcribe,
+tg_export_import). Тесты зеркалят пакеты в `tests/`. Все модули пакета
 покрыты юнит-тестами без обращения к реальному Telegram
 API. `bot.py` проверен лёгким smoke-тестом, который собирает приложение без
 сетевых вызовов.
