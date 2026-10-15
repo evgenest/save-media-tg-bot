@@ -100,6 +100,19 @@ entities — диалект `.markdown` Pyrogram для архива не год
 только модели синтеза и преобразования голоса, моделей Scribe там нет.
 Пустой ответ (тишина, шум, слишком тихо) помечается «речь не распознана».
 
+Конвейер расшифровки целиком (`mediasaver/archive/`):
+
+```
+сообщение с голосом/аудио/видео → файл в media/                    (group.py)
+  → ElevenLabs Scribe: текст + слова с таймкодами и голосами        (transcribe.py)
+      полный ответ → media/<id>_transcript.json
+  → смысловой проход Claude: реплики по смыслу + кто говорит        (refine.py, claude_cli.py)
+      запасной путь: паузы/смена голоса + имена отдельным запросом  (segments.py, speakers.py)
+  → запись в messages.jsonl (transcript, transcript_segments, …)    (speech.py)
+  → days/*.md: «[м:сс] Имя: текст»                                  (render.py)
+переделать выбранные вручную                                        (retranscribe.py)
+```
+
 Из Scribe берётся максимум деталей: разметка по голосам (`diarize`),
 таймкоды до символа (`timestamps_granularity=character`: у каждого слова
 `start`, `end`, `speaker_id`, `logprob`, `characters`) и звуковые события
