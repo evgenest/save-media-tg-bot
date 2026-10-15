@@ -206,7 +206,7 @@ def test_create_app_with_group_archive_uses_persistent_session(tmp_path):
     from mediasaver.archive.config import ArchiveConfig
 
     archive_config = ArchiveConfig(
-        chats={-100: tmp_path / "archive"},
+        chats={(-100, None): tmp_path / "archive"},
         timezone=ZoneInfo("Europe/Berlin"),
         session_dir=tmp_path / "sessions",
         elevenlabs_api_key=None,

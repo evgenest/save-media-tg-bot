@@ -21,7 +21,8 @@ from mediasaver.archive.config import ArchiveConfig, load_archive_config
 from mediasaver.core.batch_manager import Batch, BatchManager, BatchPhase
 from mediasaver.core.config import Config, load_config
 from mediasaver.core.downloader import DownloadResult, download_media_message, extract_media_info
-from mediasaver.archive.group import register_archive_handlers
+from mediasaver.archive.backfill import start_backfill
+from mediasaver.archive.group import Archives, register_archive_handlers
 from mediasaver.core.storage import Manifest, ManifestEntry, create_batch_dir
 from mediasaver.media.text_export import is_text_message, save_text_message
 from mediasaver.media.unsupported import (
@@ -118,6 +119,8 @@ class BotState:
         self.status_messages: Dict[int, Message] = {}
         self.live_progress: Dict[int, LiveProgress] = {}
         self.ticker_tasks: Dict[int, asyncio.Task] = {}
+        # Group archives by (chat_id, topic_id); empty when the mode is off.
+        self.archives: Archives = {}
 
 
 def is_allowed(user_id: Optional[int], config: Config) -> bool:
@@ -403,7 +406,7 @@ def create_app(
             await callback_query.answer()
 
     if archive_config is not None:
-        register_archive_handlers(app, archive_config)
+        state.archives = register_archive_handlers(app, archive_config)
 
     return app
 
@@ -417,9 +420,17 @@ async def run_bot(
         await app.set_bot_commands(build_bot_commands())
         logger.info(
             "Starting mediasaver bot; group archive: %s",
-            ", ".join(str(chat_id) for chat_id in archive_config.chats) if archive_config else "off",
+            ", ".join(
+                f"{chat_id}" + (f"/{topic_id}" if topic_id else "")
+                for chat_id, topic_id in archive_config.chats
+            )
+            if archive_config
+            else "off",
         )
+        backfill = start_backfill(app, state.archives)
         await idle()
+        if backfill is not None:
+            backfill.cancel()
     finally:
         await app.stop()
 

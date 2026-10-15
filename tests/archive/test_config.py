@@ -12,10 +12,13 @@ def test_archive_off_without_chats():
 
 
 def test_parse_chats():
-    assert parse_chats("-1001=/a/b; -1002=c") == {-1001: Path("/a/b"), -1002: Path("c")}
+    assert parse_chats("-1001=/a/b; -1002/543=c") == {
+        (-1001, None): Path("/a/b"),
+        (-1002, 543): Path("c"),
+    }
 
 
-@pytest.mark.parametrize("raw", ["-1001", "abc=/x", "-1001="])
+@pytest.mark.parametrize("raw", ["-1001", "abc=/x", "-1001=", "-1001/x=/a"])
 def test_parse_chats_rejects_bad_entries(raw):
     with pytest.raises(ConfigError):
         parse_chats(raw)

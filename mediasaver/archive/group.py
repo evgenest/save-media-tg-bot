@@ -8,8 +8,15 @@ from typing import Dict, Optional
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-from mediasaver.archive.config import ArchiveConfig
-from mediasaver.archive.record import MEDIA_KINDS, build_record, markdown_body, media_meta, message_kind
+from mediasaver.archive.config import ArchiveConfig, ArchiveKey
+from mediasaver.archive.record import (
+    MEDIA_KINDS,
+    build_record,
+    markdown_body,
+    media_meta,
+    message_kind,
+    topic_of,
+)
 from mediasaver.archive.render import render_archive
 from mediasaver.archive.speech import needs_transcript, transcribe_record
 from mediasaver.archive.store import ArchiveStore
@@ -22,8 +29,8 @@ from mediasaver.media.rich_media import download_rich_media
 #
 # Bots only see all group messages with privacy mode off (BotFather
 # /setprivacy -> Disable, then re-add the bot) or as a group admin. Messages
-# sent before the bot joined are out of reach - import them from a Telegram
-# Desktop export with tg_export_import.py.
+# sent before the bot joined (or while it was down) are read on start by
+# backfill.py - bots can fetch messages by id.
 
 logger = logging.getLogger("archive")
 
@@ -47,6 +54,8 @@ class ChatArchive:
         self.store = store
         self.config = config
         self.lock = asyncio.Lock()
+        # Ids already recorded - the history backfill skips them.
+        self.known: "set[int]" = store.known_ids()
 
     async def render(self) -> None:
         title = self.store.read_meta().get("title") or "Telegram"
@@ -73,48 +82,61 @@ class ChatArchive:
             meta["error"] = error or "файл не скачан"
         return meta
 
-    async def on_message(self, client: Client, message: Message) -> None:
-        async with self.lock:
-            self.store.ensure_dirs()
-            title = getattr(message.chat, "title", None)
-            if title and self.store.read_meta().get("title") != title:
-                self.store.write_meta({"id": message.chat.id, "title": title})
+    async def ingest(self, client: Client, message: Message, *, render: bool = True) -> dict:
+        """Record a message and download its media. Caller holds the lock."""
+        self.store.ensure_dirs()
+        title = getattr(message.chat, "title", None)
+        if title and self.store.read_meta().get("title") != title:
+            self.store.update_meta(id=message.chat.id, title=title)
 
-            kind = message_kind(message)
-            attachments = None
-            rich_files: list = []
-            if kind == "rich":
-                media = await download_rich_media(
-                    client, message.rich_message, self.store.media_dir, stem=f"{message.id}_rich"
-                )
-                # Day files live in days/, media next to it.
-                attachments = {
-                    key: (f"../{self.store.media_dir.name}/{name}" if name else None)
-                    for key, name in media.attachments.items()
-                }
-                rich_files = media.stored_names
+        kind = message_kind(message)
+        attachments = None
+        rich_files: list = []
+        if kind == "rich":
+            media = await download_rich_media(
+                client, message.rich_message, self.store.media_dir, stem=f"{message.id}_rich"
+            )
+            # Day files live in days/, media next to it.
+            attachments = {
+                key: (f"../{self.store.media_dir.name}/{name}" if name else None)
+                for key, name in media.attachments.items()
+            }
+            rich_files = media.stored_names
 
-            record = build_record(message, attachments=attachments)
-            if rich_files:
-                record["rich_files"] = rich_files
-            self.store.append(record)
+        record = build_record(message, attachments=attachments)
+        if rich_files:
+            record["rich_files"] = rich_files
+        self.store.append(record)
+        self.known.add(message.id)
+        if render:
             await self.render()
 
-            if kind in MEDIA_KINDS and kind != "sticker":
-                item = await self.download(client, message, kind)
-                record["media"] = [item]
-                self.store.append({"id": message.id, "media": [item]})
+        if kind in MEDIA_KINDS and kind != "sticker":
+            item = await self.download(client, message, kind)
+            record["media"] = [item]
+            self.store.append({"id": message.id, "media": [item]})
+            if render:
                 await self.render()
+        return record
 
-        # Outside the lock: a long voice message shouldn't hold up the chat.
-        if self.config.elevenlabs_api_key and needs_transcript(
+    async def transcribe(self, record: dict) -> None:
+        if not self.config.elevenlabs_api_key or not needs_transcript(
             record, self.config.transcribe_max_seconds
         ):
-            await asyncio.to_thread(
-                transcribe_record, self.store, record, self.config.elevenlabs_api_key
-            )
-            async with self.lock:
-                await self.render()
+            return
+        await asyncio.to_thread(
+            transcribe_record, self.store, record, self.config.elevenlabs_api_key
+        )
+        async with self.lock:
+            await self.render()
+
+    async def on_message(self, client: Client, message: Message) -> None:
+        async with self.lock:
+            if message.id in self.known:  # already read by the backfill
+                return
+            record = await self.ingest(client, message)
+        # Outside the lock: a long voice message shouldn't hold up the chat.
+        await self.transcribe(record)
 
     async def on_edit(self, message: Message) -> None:
         if getattr(message, "edit_date", None) is None:
@@ -128,31 +150,44 @@ class ChatArchive:
             if current is None:  # edited before the bot saw it - store it whole
                 update = build_record(message)
             self.store.append(update)
+            self.known.add(message.id)
             await self.render()
 
 
-def register_archive_handlers(app: Client, config: ArchiveConfig, *, group: int = 1) -> None:
+Archives = Dict[ArchiveKey, ChatArchive]
+
+
+def archive_for(archives: Archives, message: Message) -> Optional[ChatArchive]:
+    """The archive of the message's topic, else of its whole chat."""
+    chat_id = message.chat.id
+    return archives.get((chat_id, topic_of(message))) or archives.get((chat_id, None))
+
+
+def register_archive_handlers(app: Client, config: ArchiveConfig, *, group: int = 1) -> Archives:
     """Attach the archive handlers to the bot's client. A separate handler
     group, so they run independently of the private-chat media saver."""
-    archives: Dict[int, ChatArchive] = {
-        chat_id: ChatArchive(ArchiveStore(root), config) for chat_id, root in config.chats.items()
+    archives: Archives = {
+        key: ChatArchive(ArchiveStore(root), config) for key, root in config.chats.items()
     }
+    archived_chats = {chat_id for chat_id, _ in archives}
     warned: "set[int]" = set()
 
-    def archive_for(message: Message) -> Optional[ChatArchive]:
-        archive = archives.get(message.chat.id)
-        if archive is None and message.chat.id not in warned:
-            warned.add(message.chat.id)
+    def find(message: Message) -> Optional[ChatArchive]:
+        archive = archive_for(archives, message)
+        chat_id = message.chat.id
+        # Other topics of an archived chat are skipped silently.
+        if archive is None and chat_id not in archived_chats and chat_id not in warned:
+            warned.add(chat_id)
             logger.warning(
                 "Chat not in ARCHIVE_CHATS, ignored: id=%s title=%r",
-                message.chat.id,
+                chat_id,
                 getattr(message.chat, "title", None),
             )
         return archive
 
     @app.on_message(filters.group, group=group)
     async def handle_message(client: Client, message: Message) -> None:
-        archive = archive_for(message)
+        archive = find(message)
         if archive is None:
             return
         try:
@@ -162,10 +197,12 @@ def register_archive_handlers(app: Client, config: ArchiveConfig, *, group: int 
 
     @app.on_edited_message(filters.group, group=group)
     async def handle_edit(client: Client, message: Message) -> None:
-        archive = archive_for(message)
+        archive = find(message)
         if archive is None:
             return
         try:
             await archive.on_edit(message)
         except Exception:
             logger.exception("Failed to archive edit %s in %s", message.id, message.chat.id)
+
+    return archives

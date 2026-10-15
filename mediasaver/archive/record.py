@@ -98,10 +98,29 @@ def forward_label(message) -> Optional[str]:
     return getattr(origin, "sender_user_name", None) or "скрытый отправитель"
 
 
+def topic_of(message) -> Optional[int]:
+    """Forum topic of a message: its thread id, the message's own id for the
+    "topic created" service message, 1 for the General topic, None outside
+    forums."""
+    thread = getattr(message, "message_thread_id", None)
+    if thread:
+        return thread
+    if getattr(message, "forum_topic_created", None) is not None:
+        return message.id
+    if getattr(getattr(message, "chat", None), "is_forum", False):
+        return 1
+    return None
+
+
 def reply_info(message) -> Optional[dict]:
     replied = getattr(message, "reply_to_message", None)
     replied_id = getattr(message, "reply_to_message_id", None)
     if replied is None and replied_id is None:
+        return None
+    # In a forum every topic message "replies" to the topic's root message;
+    # only a reply to some other message is a real one.
+    thread = getattr(message, "message_thread_id", None)
+    if thread and (getattr(replied, "id", None) or replied_id) == thread:
         return None
     info: dict = {"id": getattr(replied, "id", None) or replied_id}
     if replied is not None:
@@ -146,6 +165,9 @@ def service_description(message) -> str:
         return f"покинул(а) чат: {person_name(message.left_chat_member)}"
     if getattr(message, "new_chat_title", None):
         return f"новое название чата: {message.new_chat_title}"
+    topic = getattr(message, "forum_topic_created", None)
+    if topic is not None:
+        return f"создана тема «{getattr(topic, 'title', '')}»"
     pinned = getattr(message, "pinned_message", None)
     if pinned is not None:
         return f"закреплено сообщение #{pinned.id}"

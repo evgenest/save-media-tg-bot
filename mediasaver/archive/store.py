@@ -67,6 +67,12 @@ class ArchiveStore:
         except json.JSONDecodeError:
             return {}
 
+    def update_meta(self, **fields) -> dict:
+        meta = self.read_meta()
+        meta.update(fields)
+        self.write_meta(meta)
+        return meta
+
     def write_meta(self, meta: dict) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
         path = self.root / META_NAME

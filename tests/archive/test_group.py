@@ -12,7 +12,7 @@ from mediasaver.archive.group import ChatArchive, media_file_name
 
 def make_archive(tmp_path, api_key=None):
     config = ArchiveConfig(
-        chats={-100: tmp_path},
+        chats={(-100, None): tmp_path},
         timezone=ZoneInfo("Europe/Berlin"),
         session_dir=tmp_path / "sessions",
         elevenlabs_api_key=api_key,

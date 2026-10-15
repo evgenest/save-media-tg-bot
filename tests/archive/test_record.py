@@ -63,3 +63,34 @@ def test_naive_dates_are_converted_to_utc():
     record = build_record(message(text="x", date=datetime(2026, 10, 15, 12, 30)))
 
     assert record["date"].endswith("+00:00")
+
+
+def test_forum_topic_root_is_not_a_reply():
+    record = build_record(message(text="в теме", message_thread_id=543, reply_to_message_id=543))
+
+    assert record["reply_to"] is None
+
+
+def test_real_reply_inside_forum_topic():
+    record = build_record(message(text="ответ", message_thread_id=543, reply_to_message_id=600))
+
+    assert record["reply_to"] == {"id": 600}
+
+
+def test_topic_of():
+    from mediasaver.archive.record import topic_of
+
+    forum = SimpleNamespace(id=-100, title="Разработка", is_forum=True)
+    assert topic_of(message(message_thread_id=543)) == 543
+    assert topic_of(message(543, forum_topic_created=SimpleNamespace(title="лендинг"), chat=forum)) == 543
+    assert topic_of(message(chat=forum)) == 1
+    assert topic_of(message()) is None
+
+
+def test_topic_created_service_text():
+    record = build_record(
+        message(543, service=SimpleNamespace(name="FORUM_TOPIC_CREATED"),
+                forum_topic_created=SimpleNamespace(title="лендинг"))
+    )
+
+    assert record["extra"] == "создана тема «лендинг»"

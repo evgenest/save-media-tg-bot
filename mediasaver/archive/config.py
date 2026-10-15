@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Optional
+from typing import Mapping, Optional, Tuple
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from mediasaver.core.config import ConfigError
@@ -12,13 +12,16 @@ from mediasaver.core.config import ConfigError
 # when ARCHIVE_CHATS is set; the bot credentials come from config.py.
 
 _DEFAULT_TZ = "Europe/Berlin"
+
+ArchiveKey = Tuple[int, Optional[int]]
 _DEFAULT_TRANSCRIBE_MAX_SECONDS = "1800"
 
 
 @dataclass(frozen=True)
 class ArchiveConfig:
-    # chat_id -> archive directory of that chat.
-    chats: "dict[int, Path]"
+    # (chat_id, topic_id) -> archive directory; topic_id None = whole chat,
+    # 1 = the General topic of a forum.
+    chats: "dict[ArchiveKey, Path]"
     timezone: ZoneInfo
     # Directory for the MTProto session file. A persistent session lets the
     # bot catch up on messages sent while it was offline.
@@ -27,20 +30,22 @@ class ArchiveConfig:
     transcribe_max_seconds: int
 
 
-def parse_chats(raw: str) -> "dict[int, Path]":
-    """`<chat_id>=<dir>` pairs separated by `;`."""
-    chats: "dict[int, Path]" = {}
+def parse_chats(raw: str) -> "dict[ArchiveKey, Path]":
+    """`<chat_id>[/<topic_id>]=<dir>` pairs separated by `;`."""
+    chats: "dict[ArchiveKey, Path]" = {}
     for part in raw.split(";"):
         part = part.strip()
         if not part:
             continue
-        chat_id, sep, directory = part.partition("=")
+        key, sep, directory = part.partition("=")
         if not sep or not directory.strip():
-            raise ConfigError(f"ARCHIVE_CHATS entry must be <chat_id>=<dir>: {part!r}")
+            raise ConfigError(f"ARCHIVE_CHATS entry must be <chat_id>[/<topic_id>]=<dir>: {part!r}")
+        chat_id, _, topic_id = key.strip().partition("/")
         try:
-            chats[int(chat_id.strip())] = Path(directory.strip()).expanduser()
+            parsed: ArchiveKey = (int(chat_id), int(topic_id) if topic_id else None)
         except ValueError as exc:
-            raise ConfigError(f"ARCHIVE_CHATS chat id must be an integer: {chat_id!r}") from exc
+            raise ConfigError(f"ARCHIVE_CHATS ids must be integers: {key!r}") from exc
+        chats[parsed] = Path(directory.strip()).expanduser()
     if not chats:
         raise ConfigError("ARCHIVE_CHATS must contain at least one chat")
     return chats
