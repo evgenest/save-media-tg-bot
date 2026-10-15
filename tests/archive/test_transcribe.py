@@ -29,6 +29,10 @@ def test_transcribe_file_sends_multipart(tmp_path):
         return FakeResponse(json.dumps({"text": " Привіт ", "language_code": "ukr"}).encode())
 
     assert transcribe_file(audio, "secret", opener=opener) == "Привіт"
+    assert f'name="model_id"\r\n\r\n{MODEL_ID}'.encode() in seen["body"]
+    transcribe_file(audio, "secret", model="scribe_v3", opener=opener)
+    assert b'name="model_id"\r\n\r\nscribe_v3' in seen["body"]
+    transcribe_file(audio, "secret", opener=opener)  # restore seen for the checks below
     assert seen["url"] == API_URL
     assert seen["key"] == "secret"
     assert f'name="model_id"\r\n\r\n{MODEL_ID}'.encode() in seen["body"]
@@ -64,7 +68,7 @@ def test_transcribe_pending_records_errors(tmp_path):
     store.append({"id": 1, "kind": "voice", "media": [{"path": "media/1.ogg"}]})
     store.append({"id": 2, "kind": "audio", "media": [{"path": "media/2.mp3"}]})
 
-    def transcriber(path, key):
+    def transcriber(path, key, model):
         if path.name == "2.mp3":
             raise TranscriptionError("HTTP 500")
         return "текст"

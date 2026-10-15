@@ -15,7 +15,7 @@ from mediasaver.core.config import ConfigError
 # Hot reload of the archive settings: the bot re-reads its env file
 # (CONFIG_FILE) when it changes - on every group message and every
 # WATCH_INTERVAL seconds - and applies ARCHIVE_CHATS, ARCHIVE_TZ,
-# ELEVENLABS_API_KEY and TRANSCRIBE_MAX_SECONDS without a restart.
+# ELEVENLABS_API_KEY, STT_MODEL and TRANSCRIBE_MAX_SECONDS without a restart.
 # Bot credentials and ARCHIVE_SESSION_DIR still need a restart.
 
 logger = logging.getLogger("archive.live")

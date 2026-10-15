@@ -30,6 +30,8 @@ def test_defaults():
     assert config.timezone.key == "Europe/Berlin"
     assert config.elevenlabs_api_key is None
     assert config.transcribe_max_seconds == 1800
+    assert config.stt_model == "scribe_v2"
+    assert load_archive_config({"ARCHIVE_CHATS": "-1=/x", "STT_MODEL": " scribe_v3 "}).stt_model == "scribe_v3"
     assert config.session_dir == Path("sessions")
 
 

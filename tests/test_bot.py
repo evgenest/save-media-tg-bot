@@ -211,6 +211,7 @@ def test_create_app_with_group_archive_uses_persistent_session(tmp_path):
         session_dir=tmp_path / "sessions",
         elevenlabs_api_key=None,
         transcribe_max_seconds=1800,
+        stt_model="scribe_v2",
     )
 
     from mediasaver.archive.live import LiveArchives

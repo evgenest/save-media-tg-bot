@@ -93,7 +93,7 @@ def test_bad_config_keeps_previous(tmp_path):
 
 async def test_new_key_transcribes_pending_voices(tmp_path, monkeypatch):
     calls = []
-    monkeypatch.setattr(archive_speech, "transcribe_file", lambda path, key: calls.append(key) or "текст")
+    monkeypatch.setattr(archive_speech, "transcribe_file", lambda path, key, model: calls.append(key) or "текст")
     root = tmp_path / "a"
     live, env_file = make_live(tmp_path, f"ARCHIVE_CHATS=-1={root}\n")
     store = live.archives[(-1, None)].store
@@ -119,7 +119,7 @@ def test_build_live_archives(tmp_path):
 
 async def test_changed_key_retries_failed_transcripts(tmp_path, monkeypatch):
     calls = []
-    monkeypatch.setattr(archive_speech, "transcribe_file", lambda path, key: calls.append(key) or "текст")
+    monkeypatch.setattr(archive_speech, "transcribe_file", lambda path, key, model: calls.append(key) or "текст")
     root = tmp_path / "a"
     live, env_file = make_live(tmp_path, f"ARCHIVE_CHATS=-1={root}\nELEVENLABS_API_KEY=bad\n")
     store = live.archives[(-1, None)].store
@@ -141,3 +141,21 @@ async def test_changed_key_retries_failed_transcripts(tmp_path, monkeypatch):
     assert calls == ["good"]
     assert record["transcript"] == "текст"
     assert record["transcript_error"] is None
+
+
+async def test_stt_model_is_hot_reloaded(tmp_path, monkeypatch):
+    models = []
+    monkeypatch.setattr(archive_speech, "transcribe_file", lambda path, key, model: models.append(model) or "т")
+    root = tmp_path / "a"
+    live, env_file = make_live(tmp_path, f"ARCHIVE_CHATS=-1={root}\nELEVENLABS_API_KEY=k\n")
+    archive = live.archives[(-1, None)]
+
+    write_env(env_file, f"ARCHIVE_CHATS=-1={root}\nELEVENLABS_API_KEY=k\nSTT_MODEL=scribe_v3\n", 10)
+    changes = live.reload()
+    archive.store.append({"id": 1, "date": "2026-10-15T10:00:00+00:00", "kind": "voice",
+                          "media": [{"kind": "voice", "path": "media/1.ogg"}]})
+    await archive.transcribe_pending()
+
+    assert not changes.transcription  # a new model doesn't redo old transcripts
+    assert models == ["scribe_v3"]
+    assert archive.store.load()[0]["transcript_model"] == "scribe_v3"

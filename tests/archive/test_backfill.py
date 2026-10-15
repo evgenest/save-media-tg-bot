@@ -20,6 +20,7 @@ def make_archives(tmp_path):
         session_dir=tmp_path / "s",
         elevenlabs_api_key=None,
         transcribe_max_seconds=1800,
+        stt_model="scribe_v2",
     )
     return {key: ChatArchive(ArchiveStore(root), config) for key, root in config.chats.items()}
 

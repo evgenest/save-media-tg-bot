@@ -132,7 +132,11 @@ class ChatArchive:
         ):
             return
         await asyncio.to_thread(
-            transcribe_record, self.store, record, self.config.elevenlabs_api_key
+            transcribe_record,
+            self.store,
+            record,
+            self.config.elevenlabs_api_key,
+            model=self.config.stt_model,
         )
         async with self.lock:
             await self.render()

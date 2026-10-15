@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from mediasaver.archive.render import render_archive
 from mediasaver.archive.speech import transcribe_pending
+from mediasaver.archive.transcribe import MODEL_ID
 from mediasaver.archive.store import ArchiveStore
 from mediasaver.core.downloader import resolve_filename_collision, sanitize_filename
 from mediasaver.archive.tg_markdown import export_pieces_to_markdown
@@ -170,7 +171,9 @@ def main(argv=None) -> int:
             print("ELEVENLABS_API_KEY не задан — расшифровка пропущена", file=sys.stderr)
         else:
             max_seconds = int(os.environ.get("TRANSCRIBE_MAX_SECONDS") or 1800)
-            count = transcribe_pending(store, api_key, max_seconds)
+            count = transcribe_pending(
+                store, api_key, max_seconds, model=os.environ.get("STT_MODEL") or MODEL_ID
+            )
             print(f"Расшифровано: {count}")
 
     render_archive(store.root, store.load(), ZoneInfo(args.tz), title)

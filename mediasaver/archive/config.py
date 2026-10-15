@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Mapping, Optional, Tuple
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from mediasaver.archive.transcribe import MODEL_ID
 from mediasaver.core.config import ConfigError
 
 # Group archive mode (group_archive.py): the same bot, added to a group chat,
@@ -27,6 +28,8 @@ class ArchiveConfig:
     # bot catch up on messages sent while it was offline.
     session_dir: Path
     elevenlabs_api_key: Optional[str]
+    # ElevenLabs Scribe model for transcripts (STT_MODEL).
+    stt_model: str
     transcribe_max_seconds: int
 
 
@@ -71,5 +74,6 @@ def load_archive_config(env: Mapping[str, str]) -> Optional[ArchiveConfig]:
         timezone=timezone,
         session_dir=Path(env.get("ARCHIVE_SESSION_DIR") or "sessions").expanduser(),
         elevenlabs_api_key=env.get("ELEVENLABS_API_KEY") or None,
+        stt_model=(env.get("STT_MODEL") or "").strip() or MODEL_ID,
         transcribe_max_seconds=max_seconds,
     )

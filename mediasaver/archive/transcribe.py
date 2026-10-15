@@ -13,6 +13,9 @@ from urllib.error import HTTPError
 # Ukrainian, Russian and English.
 
 API_URL = "https://api.elevenlabs.io/v1/speech-to-text"
+# Default Scribe model; STT_MODEL overrides it (hot-reloaded, see live.py).
+# /v1/models lists only TTS/voice-conversion models, so there is no API to
+# discover the newest STT model - bump it here or via STT_MODEL.
 MODEL_ID = "scribe_v2"
 TIMEOUT_SECONDS = 600
 NO_SPEECH = "речь не распознана — тишина, шум или слишком тихо"
@@ -45,10 +48,11 @@ def transcribe_file(
     file_path: Path,
     api_key: str,
     *,
+    model: str = MODEL_ID,
     opener: Optional[Callable] = None,
 ) -> str:
     body, content_type = build_multipart(
-        {"model_id": MODEL_ID, "tag_audio_events": "false", "timestamps_granularity": "none"},
+        {"model_id": model, "tag_audio_events": "false", "timestamps_granularity": "none"},
         file_path,
     )
     req = request.Request(

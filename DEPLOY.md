@@ -177,7 +177,7 @@ journalctl --user -u mediasaver-bot -f         # логи
   запроса к Telegram. Flood wait бывает только при первой загрузке длинной
   истории — бот ждёт его сам.
 - Для смены настроек архива (`ARCHIVE_CHATS`, `ELEVENLABS_API_KEY`,
-  `ARCHIVE_TZ`, `TRANSCRIBE_MAX_SECONDS`) перезапуск не нужен, если в
+  `STT_MODEL`, `ARCHIVE_TZ`, `TRANSCRIBE_MAX_SECONDS`) перезапуск не нужен, если в
   `.env.local` задан `CONFIG_FILE` с путём к нему же: бот перечитывает файл
   сам (см. README, «Архив группового чата»). Токен и обновления кода —
   `systemctl --user restart mediasaver-bot`.

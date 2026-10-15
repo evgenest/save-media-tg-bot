@@ -17,6 +17,7 @@ def make_archive(tmp_path, api_key=None):
         session_dir=tmp_path / "sessions",
         elevenlabs_api_key=api_key,
         transcribe_max_seconds=1800,
+        stt_model="scribe_v2",
     )
     return ChatArchive(ArchiveStore(tmp_path), config)
 
@@ -62,8 +63,8 @@ async def test_failed_download_is_recorded(tmp_path):
 async def test_voice_is_transcribed(tmp_path, monkeypatch):
     calls = []
 
-    def fake_transcribe(path, api_key):
-        calls.append((Path(path).name, api_key))
+    def fake_transcribe(path, api_key, model):
+        calls.append((Path(path).name, api_key, model))
         return "Добрий день"
 
     monkeypatch.setattr(archive_speech, "transcribe_file", fake_transcribe)
@@ -71,7 +72,8 @@ async def test_voice_is_transcribed(tmp_path, monkeypatch):
 
     await archive.on_message(FakeClient(), message(voice=SimpleNamespace(duration=3, mime_type="audio/ogg")))
 
-    assert calls == [("10_voice.ogg", "key")]
+    assert calls == [("10_voice.ogg", "key", "scribe_v2")]
+    assert archive.store.load()[0]["transcript_model"] == "scribe_v2"
     assert archive.store.load()[0]["transcript"] == "Добрий день"
     assert "Расшифровка:** Добрий день" in (tmp_path / "days" / "2026-10-15.md").read_text(encoding="utf-8")
 
