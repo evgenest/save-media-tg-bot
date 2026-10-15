@@ -17,9 +17,11 @@ from pyrogram.types import (
     Message,
 )
 
+from archive_config import ArchiveConfig, load_archive_config
 from batch_manager import Batch, BatchManager, BatchPhase
 from config import Config, load_config
 from downloader import DownloadResult, download_media_message, extract_media_info
+from group_archive import register_archive_handlers
 from storage import Manifest, ManifestEntry, create_batch_dir
 from text_export import is_text_message, save_text_message
 from unsupported import (
@@ -210,13 +212,22 @@ async def refresh_status_message(
         return status_message
 
 
-def create_app(config: Config, state: BotState) -> Client:
+def create_app(
+    config: Config, state: BotState, archive_config: Optional[ArchiveConfig] = None
+) -> Client:
+    if archive_config is None:
+        session = {"in_memory": True}
+    else:
+        # The group archive must not lose messages sent while the bot was
+        # down: a persistent session lets it catch up on start.
+        archive_config.session_dir.mkdir(parents=True, exist_ok=True)
+        session = {"workdir": str(archive_config.session_dir), "skip_updates": False}
     app = Client(
         "mediasaver_bot",
         api_id=config.api_id,
         api_hash=config.api_hash,
         bot_token=config.bot_token,
-        in_memory=True,
+        **session,
     )
 
     async def on_batch_created(batch: Batch) -> None:
@@ -391,15 +402,23 @@ def create_app(config: Config, state: BotState) -> Client:
         else:
             await callback_query.answer()
 
+    if archive_config is not None:
+        register_archive_handlers(app, archive_config)
+
     return app
 
 
-async def run_bot(config: Config, state: BotState) -> None:
-    app = create_app(config, state)
+async def run_bot(
+    config: Config, state: BotState, archive_config: Optional[ArchiveConfig] = None
+) -> None:
+    app = create_app(config, state, archive_config)
     await app.start()
     try:
         await app.set_bot_commands(build_bot_commands())
-        logger.info("Starting mediasaver bot")
+        logger.info(
+            "Starting mediasaver bot; group archive: %s",
+            ", ".join(str(chat_id) for chat_id in archive_config.chats) if archive_config else "off",
+        )
         await idle()
     finally:
         await app.stop()
@@ -408,7 +427,7 @@ async def run_bot(config: Config, state: BotState) -> None:
 def main() -> None:
     config = load_config(os.environ)
     config.storage_dir.mkdir(parents=True, exist_ok=True)
-    asyncio.run(run_bot(config, BotState()))
+    asyncio.run(run_bot(config, BotState(), load_archive_config(os.environ)))
 
 
 if __name__ == "__main__":

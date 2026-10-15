@@ -198,3 +198,24 @@ def test_build_bot_commands_includes_start_and_help():
     names = [c.command for c in commands]
 
     assert names == ["start", "help"]
+
+
+def test_create_app_with_group_archive_uses_persistent_session(tmp_path):
+    from zoneinfo import ZoneInfo
+
+    from archive_config import ArchiveConfig
+
+    archive_config = ArchiveConfig(
+        chats={-100: tmp_path / "archive"},
+        timezone=ZoneInfo("Europe/Berlin"),
+        session_dir=tmp_path / "sessions",
+        elevenlabs_api_key=None,
+        transcribe_max_seconds=1800,
+    )
+
+    app = create_app(make_test_config(tmp_path), BotState(), archive_config)
+
+    assert not app.in_memory
+    assert app.skip_updates is False
+    assert app.workdir == tmp_path / "sessions"
+    app.loop.run_until_complete(asyncio.sleep(0))
