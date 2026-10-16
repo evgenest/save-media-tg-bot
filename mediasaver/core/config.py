@@ -75,7 +75,8 @@ def load_config(env: Mapping[str, str]) -> Config:
         api_hash=env["API_HASH"],
         bot_token=env["BOT_TOKEN"],
         allowed_user_ids=allowed_user_ids,
-        storage_dir=Path(env["STORAGE_DIR"]),
+        # Absolute: Pyrogram resolves relative download paths against its workdir.
+        storage_dir=Path(env["STORAGE_DIR"]).resolve(),
         batch_timeout=batch_timeout,
         owner_user_id=owner_user_id,
     )
