@@ -9,6 +9,7 @@ from bot import (
     BotState,
     LiveProgress,
     build_bot_commands,
+    build_failure_text,
     build_finish_keyboard,
     build_help_keyboard,
     build_help_text,
@@ -190,6 +191,37 @@ async def test_refresh_status_message_swallows_edit_errors():
     result = await refresh_status_message(batch, live, message, batch_timeout=30.0)
 
     assert result is message
+
+
+async def test_refresh_status_message_does_not_log_unchanged_text(caplog):
+    from pyrogram.errors import MessageNotModified
+
+    class SameText(FakeStatusMessage):
+        async def edit_text(self, text, reply_markup=None):
+            raise MessageNotModified()
+
+    batch = make_batch(phase=BatchPhase.DOWNLOADING)
+    message = SameText()
+
+    result = await refresh_status_message(batch, LiveProgress(), message, batch_timeout=30.0)
+
+    assert result is message
+    assert "Failed to refresh" not in caplog.text
+
+
+def test_build_failure_text_names_file_and_reason(tmp_path):
+    from mediasaver.core.downloader import DownloadResult
+
+    outcome = DownloadResult(
+        success=False, message_id=1, media_type="document", original_name="a.zip",
+        stored_name="a.zip", size_bytes=0, file_path=tmp_path / "a.zip",
+        message_date="d", caption=None, error="загрузка зависла: нет данных 60 с",
+    )
+
+    text = build_failure_text(outcome)
+
+    assert "«a.zip»" in text
+    assert "зависла" in text
 
 
 def test_build_bot_commands_includes_start_and_help():

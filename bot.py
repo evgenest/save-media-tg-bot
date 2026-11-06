@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Awaitable, Callable, Dict, Optional
 
 from pyrogram import Client, filters, idle
+from pyrogram.errors import MessageNotModified
 from pyrogram.types import (
     BotCommand,
     CallbackQuery,
@@ -21,6 +22,7 @@ from mediasaver.archive.config import load_archive_config
 from mediasaver.core.batch_manager import Batch, BatchManager, BatchPhase
 from mediasaver.core.config import Config, load_config
 from mediasaver.core.downloader import DownloadResult, download_media_message, extract_media_info
+from mediasaver.core.media_session import reset_media_session
 from mediasaver.archive.backfill import start_backfill
 from mediasaver.archive.group import Archives, register_archive_handlers
 from mediasaver.archive.live import LiveArchives
@@ -72,6 +74,10 @@ RICH_FILTER = filters.create(
 FORWARDED_FILTER = filters.forwarded
 
 STATUS_REFRESH_INTERVAL = 5.0
+
+# A download attempt with no new bytes for this long is aborted, the media
+# connection is recreated and the file retried (see reset_media_session).
+DOWNLOAD_STALL_TIMEOUT = 60.0
 
 
 async def run_status_ticker(batch: Batch, state: BotState, batch_timeout: float) -> None:
@@ -161,6 +167,14 @@ def build_summary_text(batch: Batch, batch_dir: Path) -> str:
     return text
 
 
+def build_failure_text(outcome: DownloadResult) -> str:
+    name = outcome.original_name or outcome.stored_name
+    return (
+        f"⚠️ Не удалось скачать «{name}»: {outcome.error}\n"
+        "Остальные файлы пакета сохраняются дальше. Этот файл перешлите ещё раз."
+    )
+
+
 def build_help_text(batch_timeout: float) -> str:
     timeout_seconds = int(batch_timeout)
     return (
@@ -211,6 +225,9 @@ async def refresh_status_message(
             text = build_status_text(batch, live)
             markup = None
         return await status_message.edit_text(text, reply_markup=markup)
+    except MessageNotModified:
+        # The ticker re-renders every few seconds; unchanged text is normal.
+        return status_message
     except Exception:
         logger.exception("Failed to refresh status message for user %s", batch.user_id)
         return status_message
@@ -282,10 +299,22 @@ def create_app(
 
         try:
             outcome = await download_media_message(
-                app, message, batch_dir, date_str=date_str, progress=progress
+                app,
+                message,
+                batch_dir,
+                date_str=date_str,
+                progress=progress,
+                stall_timeout=DOWNLOAD_STALL_TIMEOUT,
+                on_retry=lambda: reset_media_session(app, message),
             )
         finally:
             live.current_name = None
+        if not outcome.success:
+            logger.warning(
+                "Download of message %s failed: %s", message.id, outcome.error
+            )
+            # Don't hand a possibly broken connection to the next file.
+            await reset_media_session(app, message)
         return outcome
 
     async def on_file_downloaded(batch: Batch, outcome: DownloadResult) -> None:
@@ -303,6 +332,11 @@ def create_app(
                 attachments=outcome.attachments,
             )
         )
+        if not outcome.success:
+            try:
+                await app.send_message(batch.user_id, build_failure_text(outcome))
+            except Exception:
+                logger.exception("Failed to report download error to %s", batch.user_id)
 
     async def on_batch_closed(batch: Batch) -> None:
         batch_dir = state.batch_dirs.pop(batch.batch_id, None)

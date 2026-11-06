@@ -184,3 +184,64 @@ async def test_download_media_message_forwards_progress_callback(tmp_path):
     await download_media_message(client, message, tmp_path, date_str="d", progress=progress)
 
     assert client.progress_calls == [progress]
+
+
+class HangingClient:
+    """First `hang_times` calls never finish (stuck media connection)."""
+
+    def __init__(self, hang_times: int):
+        self.hang_times = hang_times
+        self.calls = 0
+
+    async def download_media(self, message, file_name: str, progress=None) -> str:
+        import asyncio
+
+        self.calls += 1
+        if self.hang_times > 0:
+            self.hang_times -= 1
+            await asyncio.sleep(3600)
+        await progress(10, 10)
+        Path(file_name).write_bytes(b"x" * 10)
+        return file_name
+
+
+async def test_download_media_message_aborts_stalled_attempt_and_retries(tmp_path):
+    client = HangingClient(hang_times=1)
+    resets = []
+
+    async def on_retry():
+        resets.append(True)
+
+    message = FakeMessage(id=1, document=FakeMedia(file_name="a.zip", file_size=10))
+    result = await download_media_message(
+        client, message, tmp_path, date_str="d", stall_timeout=0.05, on_retry=on_retry
+    )
+
+    assert result.success is True
+    assert client.calls == 2
+    assert resets == [True]
+
+
+async def test_download_media_message_reports_stall_after_all_retries(tmp_path):
+    client = HangingClient(hang_times=5)
+    message = FakeMessage(id=1, document=FakeMedia(file_name="a.zip", file_size=10))
+
+    result = await download_media_message(
+        client, message, tmp_path, date_str="d", max_retries=1, stall_timeout=0.05
+    )
+
+    assert result.success is False
+    assert "зависла" in result.error
+    assert client.calls == 2
+
+
+async def test_download_media_message_ignores_on_retry_failure(tmp_path):
+    client = StubClient(fail_times=1)
+
+    async def on_retry():
+        raise RuntimeError("reset failed")
+
+    message = FakeMessage(id=1, document=FakeMedia(file_name="a.bin"))
+    result = await download_media_message(client, message, tmp_path, date_str="d", on_retry=on_retry)
+
+    assert result.success is True

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable, Optional, Protocol, Tuple
 
+from mediasaver.core.stall_guard import run_with_stall_guard
+
 _UNSAFE_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _MEDIA_ATTRS = ("photo", "video", "audio", "document", "voice", "video_note", "animation")
 
@@ -95,7 +97,12 @@ async def download_media_message(
     date_str: str,
     max_retries: int = 2,
     progress: Optional[Callable[[int, int], Awaitable[None]]] = None,
+    stall_timeout: Optional[float] = None,
+    on_retry: Optional[Callable[[], Awaitable[None]]] = None,
 ) -> DownloadResult:
+    """stall_timeout: abort an attempt after this many seconds without
+    progress. on_retry: awaited before every retry (e.g. to reset a stuck
+    connection); its own failures are ignored."""
     media_info = extract_media_info(message)
     if media_info is None:
         raise ValueError("Message does not contain supported media")
@@ -108,11 +115,22 @@ async def download_media_message(
     dest_path = dest_dir / final_name
 
     last_error: Optional[str] = None
-    for _ in range(max_retries + 1):
+    async def attempt(cb) -> None:
+        await client.download_media(message, file_name=str(dest_path), progress=cb)
+
+    for attempt_no in range(max_retries + 1):
+        if attempt_no and on_retry is not None:
+            try:
+                await on_retry()
+            except Exception:
+                pass
         try:
-            await client.download_media(message, file_name=str(dest_path), progress=progress)
+            if stall_timeout is None:
+                await attempt(progress)
+            else:
+                await run_with_stall_guard(attempt, stall_timeout, progress)
         except Exception as exc:  # any download failure is retried, never crashes the batch
-            last_error = str(exc)
+            last_error = str(exc) or type(exc).__name__
             continue
 
         size_bytes = dest_path.stat().st_size if dest_path.exists() else media_info.file_size
