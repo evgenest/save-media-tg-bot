@@ -22,7 +22,8 @@ from mediasaver.archive.config import load_archive_config
 from mediasaver.core.batch_manager import Batch, BatchManager, BatchPhase
 from mediasaver.core.config import Config, load_config
 from mediasaver.core.downloader import DownloadResult, download_media_message, extract_media_info
-from mediasaver.core.media_session import reset_media_session
+from mediasaver.core.media_session import reset_hook, reset_media_session
+from mediasaver.core.stall_guard import DEFAULT_STALL_TIMEOUT
 from mediasaver.archive.backfill import start_backfill
 from mediasaver.archive.group import Archives, register_archive_handlers
 from mediasaver.archive.live import LiveArchives
@@ -74,10 +75,6 @@ RICH_FILTER = filters.create(
 FORWARDED_FILTER = filters.forwarded
 
 STATUS_REFRESH_INTERVAL = 5.0
-
-# A download attempt with no new bytes for this long is aborted, the media
-# connection is recreated and the file retried (see reset_media_session).
-DOWNLOAD_STALL_TIMEOUT = 60.0
 
 
 async def run_status_ticker(batch: Batch, state: BotState, batch_timeout: float) -> None:
@@ -304,8 +301,8 @@ def create_app(
                 batch_dir,
                 date_str=date_str,
                 progress=progress,
-                stall_timeout=DOWNLOAD_STALL_TIMEOUT,
-                on_retry=lambda: reset_media_session(app, message),
+                stall_timeout=DEFAULT_STALL_TIMEOUT,
+                on_retry=reset_hook(app, message),
             )
         finally:
             live.current_name = None

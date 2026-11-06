@@ -8,6 +8,10 @@ T = TypeVar("T")
 
 Progress = Callable[[int, int], Awaitable[None]]
 
+# No new bytes for this long -> the attempt is aborted and retried on a
+# fresh media connection.
+DEFAULT_STALL_TIMEOUT = 60.0
+
 
 class DownloadStalled(Exception):
     """No progress reported for longer than the allowed stall timeout."""

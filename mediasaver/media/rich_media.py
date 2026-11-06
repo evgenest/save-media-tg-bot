@@ -5,7 +5,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Awaitable, Callable, Dict, List, Optional
 
-from mediasaver.core.downloader import resolve_filename_collision, sanitize_filename
+from mediasaver.core.downloader import (
+    download_with_retries,
+    resolve_filename_collision,
+    sanitize_filename,
+)
+from mediasaver.core.media_session import reset_hook
+from mediasaver.core.stall_guard import DEFAULT_STALL_TIMEOUT
 from mediasaver.media.rich_markdown import iter_media_blocks, media_of
 
 ProgressFactory = Callable[[str], Callable[[int, int], Awaitable[None]]]
@@ -56,15 +62,15 @@ async def download_rich_media(
         dest_path = dest_dir / file_name
         progress = progress_for(file_name) if progress_for else None
 
-        last_error: Optional[str] = None
-        for _ in range(max_retries + 1):
-            try:
-                await client.download_media(media, file_name=str(dest_path), progress=progress)
-            except Exception as exc:  # retried, never crashes the batch
-                last_error = str(exc)
-                continue
-            last_error = None
-            break
+        last_error = await download_with_retries(
+            client,
+            media,
+            dest_path,
+            max_retries=max_retries,
+            progress=progress,
+            stall_timeout=DEFAULT_STALL_TIMEOUT,
+            on_retry=reset_hook(client, media),
+        )
 
         if last_error is not None:
             result.attachments[id(block)] = None

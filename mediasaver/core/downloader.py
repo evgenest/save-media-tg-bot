@@ -89,35 +89,27 @@ class DownloadResult:
     attachments: Tuple[str, ...] = ()
 
 
-async def download_media_message(
+async def download_with_retries(
     client: MediaDownloader,
-    message,
-    dest_dir: Path,
+    target,
+    dest_path: Path,
     *,
-    date_str: str,
     max_retries: int = 2,
     progress: Optional[Callable[[int, int], Awaitable[None]]] = None,
     stall_timeout: Optional[float] = None,
     on_retry: Optional[Callable[[], Awaitable[None]]] = None,
-) -> DownloadResult:
-    """stall_timeout: abort an attempt after this many seconds without
+) -> Optional[str]:
+    """Download `target` (a message or media object) to `dest_path`.
+    Returns None on success, else the last error text; never raises.
+
+    stall_timeout: abort an attempt after this many seconds without
     progress. on_retry: awaited before every retry (e.g. to reset a stuck
     connection); its own failures are ignored."""
-    media_info = extract_media_info(message)
-    if media_info is None:
-        raise ValueError("Message does not contain supported media")
 
-    caption = getattr(message, "caption", None)
-    base_name = media_info.file_name or build_default_filename(
-        media_info.media_type, message.id, date_str, media_info.mime_type
-    )
-    final_name = resolve_filename_collision(dest_dir, sanitize_filename(base_name))
-    dest_path = dest_dir / final_name
+    async def attempt(cb) -> None:
+        await client.download_media(target, file_name=str(dest_path), progress=cb)
 
     last_error: Optional[str] = None
-    async def attempt(cb) -> None:
-        await client.download_media(message, file_name=str(dest_path), progress=cb)
-
     for attempt_no in range(max_retries + 1):
         if attempt_no and on_retry is not None:
             try:
@@ -129,10 +121,45 @@ async def download_media_message(
                 await attempt(progress)
             else:
                 await run_with_stall_guard(attempt, stall_timeout, progress)
-        except Exception as exc:  # any download failure is retried, never crashes the batch
+        except Exception as exc:  # any download failure is retried, never crashes the caller
             last_error = str(exc) or type(exc).__name__
             continue
+        return None
+    return last_error
 
+
+async def download_media_message(
+    client: MediaDownloader,
+    message,
+    dest_dir: Path,
+    *,
+    date_str: str,
+    max_retries: int = 2,
+    progress: Optional[Callable[[int, int], Awaitable[None]]] = None,
+    stall_timeout: Optional[float] = None,
+    on_retry: Optional[Callable[[], Awaitable[None]]] = None,
+) -> DownloadResult:
+    media_info = extract_media_info(message)
+    if media_info is None:
+        raise ValueError("Message does not contain supported media")
+
+    caption = getattr(message, "caption", None)
+    base_name = media_info.file_name or build_default_filename(
+        media_info.media_type, message.id, date_str, media_info.mime_type
+    )
+    final_name = resolve_filename_collision(dest_dir, sanitize_filename(base_name))
+    dest_path = dest_dir / final_name
+
+    error = await download_with_retries(
+        client,
+        message,
+        dest_path,
+        max_retries=max_retries,
+        progress=progress,
+        stall_timeout=stall_timeout,
+        on_retry=on_retry,
+    )
+    if error is None:
         size_bytes = dest_path.stat().st_size if dest_path.exists() else media_info.file_size
         return DownloadResult(
             success=True,
@@ -156,5 +183,5 @@ async def download_media_message(
         file_path=dest_path,
         message_date=date_str,
         caption=caption,
-        error=last_error,
+        error=error,
     )

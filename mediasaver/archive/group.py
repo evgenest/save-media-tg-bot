@@ -20,7 +20,13 @@ from mediasaver.archive.record import (
 from mediasaver.archive.render import render_archive
 from mediasaver.archive.speech import claude_passes, needs_transcript, transcribe_record
 from mediasaver.archive.store import ArchiveStore
-from mediasaver.core.downloader import resolve_filename_collision, sanitize_filename
+from mediasaver.core.downloader import (
+    download_with_retries,
+    resolve_filename_collision,
+    sanitize_filename,
+)
+from mediasaver.core.media_session import reset_hook, reset_media_session
+from mediasaver.core.stall_guard import DEFAULT_STALL_TIMEOUT
 from mediasaver.media.rich_media import download_rich_media
 
 # Group archive mode: the bot sits in the configured group chats and silently
@@ -71,14 +77,17 @@ class ChatArchive:
             self.store.media_dir, media_file_name(message.id, meta)
         )
         dest = self.store.media_dir / name
-        error: Optional[str] = None
-        for _ in range(DOWNLOAD_RETRIES + 1):
-            try:
-                await client.download_media(message, file_name=str(dest))
-                error = None
-                break
-            except Exception as exc:  # retried; a failure is recorded, never fatal
-                error = str(exc)
+        error = await download_with_retries(
+            client,
+            message,
+            dest,
+            max_retries=DOWNLOAD_RETRIES,
+            stall_timeout=DEFAULT_STALL_TIMEOUT,
+            on_retry=reset_hook(client, message),
+        )
+        if error is not None:
+            # Don't hand a possibly broken connection to the next file.
+            await reset_media_session(client, message)
         if error is None and dest.exists():
             meta["path"] = f"{self.store.media_dir.name}/{name}"
         else:
